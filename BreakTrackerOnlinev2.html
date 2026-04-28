@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Break Tracker</title>
+<style>
+:root {
+  --bg: #0b1220;
+  --text: #e5e7eb;
+  --card-bg: #111827;
+  --muted: #94a3b8;
+  --border: #374151;
+  --input-bg: #0b1220;
+}
+
+.light-mode {
+  --bg: #f3f4f6;
+  --text: #111827;
+  --card-bg: #ffffff;
+  --muted: #4b5563;
+  --border: #d1d5db;
+  --input-bg: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s, color 0.3s;
+}
+
+.wrap {
+  max-width: 920px;
+  margin: auto;
+  padding: 20px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+  position: relative;
+  border: 3px solid var(--border);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+
+h1, h2 { margin: 0 0 10px; }
+h1 { padding-left: 35px; }
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.g { background: #16a34a; color: #fff; }
+.r { background: #dc2626; color: #fff; }
+.b { background: #2563eb; color: #fff; }
+.y { background: #ca8a04; color: #fff; }
+.s { background: #334155; color: #fff; }
+
+.timer {
+  font-size: clamp(32px, 10vw, 56px);
+  font-weight: 800;
+  text-align: center;
+  margin: 16px 0;
+}
+
+.muted { color: var(--muted); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.hidden { display: none; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #374151;
+  padding: 8px;
+  text-align: left;
+}
+
+input, select {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+
+.good { color: #22c55e; }
+.warn { color: #f59e0b; }
+.bad { color: #ef4444; }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(0.8); }
+.btn-glow { box-shadow: 0 0 15px rgba(255, 255, 255, 0.4); }
+
+.card.breathe-good { animation: breathe-good 4s infinite ease-in-out; }
+.card.breathe-warn { animation: breathe-warn 4s infinite ease-in-out; }
+.card.breathe-bad { animation: breathe-bad 4s infinite ease-in-out; }
+
+@keyframes breathe-good {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: #22c55e; }
+}
+
+@keyframes breathe-warn {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: #f59e0b; }
+}
+
+@keyframes breathe-bad {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: #ef4444; }
+}
+
+.clock {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  text-align: right;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Theme Toggle Button */
+.theme-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  cursor: pointer;
+  font-size: 20px;
+  z-index: 10;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .clock {
+    position: static;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .row {
+    flex-direction: column;
+  }
+  .row .btn, .row input, .row select {
+    width: 100%;
+  }
+  .modal-content {
+    width: 95%;
+    padding: 15px;
+  }
+  table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* Modal Styles */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+}
+.modal-content {
+  background-color: #111827;
+  margin: 5% auto;
+  padding: 25px;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 850px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  border: 1px solid var(--border);
+  transition: background 0.3s, border-color 0.3s;
+}
+.close-modal {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  font-size: 28px;
+  font-weight: bold;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.close-modal:hover { color: #e5e7eb; }
+
+.portal-select {
+  text-align: center;
+  padding: 60px 20px;
+}
+.portal-select h1 { padding-left: 0; margin-bottom: 30px; }
+</style>
+</head>
+<body>
+<div class='wrap'>
+
+<!-- STARTUP PORTAL SELECTION -->
+<div id="portalSelect" class="card portal-select">
+    <h1>Break Tracker</h1>
+    <p class="muted">Please select your portal to continue</p>
+    <div class="row" style="justify-content: center; margin-top: 30px;">
+        <button class="btn b" style="padding: 20px 40px; font-size: 1.2rem;" onclick="showAgentLogin()">Agent Portal</button>
+        <button class="btn s" style="padding: 20px 40px; font-size: 1.2rem;" onclick="showAdminLogin()">Admin Portal</button>
+    </div>
+</div>
+
+<!-- AGENT LOGIN -->
+<div id="agentLogin" class="card hidden">
+    <button class="btn s" onclick="goHome()" style="margin-bottom: 20px;">← Back</button>
+    <h2>Agent Access</h2>
+    <div class="row" style="flex-direction: column; gap: 15px; max-width: 300px; margin: auto; padding: 20px 0;">
+        <input id="loginAgentName" type="text" placeholder="Full Name">
+        <input id="loginAgentPin" type="password" placeholder="PIN/Password">
+        <button class="btn b" onclick="authAgent()">Enter Tracker</button>
+    </div>
+</div>
+
+<!-- ADMIN LOGIN -->
+<div id="adminLogin" class="card hidden">
+    <button class="btn s" onclick="goHome()" style="margin-bottom: 20px;">← Back</button>
+    <h2>Admin Access</h2>
+    <div class="row" style="flex-direction: column; gap: 15px; max-width: 300px; margin: auto; padding: 20px 0;">
+        <input id="adminPasswordInput" type="password" placeholder="Admin Password">
+        <button class="btn y" onclick="authAdmin()">Login as Admin</button>
+    </div>
+</div>
+
+<!-- AGENT MAIN INTERFACE -->
+<div id='mainCard' class='card hidden'>
+<div class='row' style="justify-content: space-between; margin-bottom: 10px;">
+    <button class="btn s" onclick="goHome()">Logout</button>
+    <div class='theme-btn' onclick='toggleTheme()' style="position: static;" title='Toggle Light/Dark Mode'>🌓</div>
+</div>
+<div id='clock' class='clock'></div>
+<h1>Break Tracker</h1><div class='muted'>Personal Break Timer</div><br>
+
+<div class='grid'>
+<div>
+<h2 id='hello'>Agent</h2>
+<div class='timer' id='timer'>01:30:00</div>
+<div id='status'>Status: Available</div><br>
+<div class='row'>
+<button id='btnStart' class='btn g' onclick='startBreak()'>Start Break</button>
+<button id='btnEnd' class='btn r' onclick='endBreak()'>End Break</button>
+</div>
+</div>
+<div>
+<h2>Today Stats</h2>
+<div id='used'>Used: 00:00:00</div>
+<div id='sessions'>Sessions: 0</div>
+<div id='health' class='good'>Healthy Balance</div>
+</div>
+</div>
+
+<div class='row' style='margin-top:20px'>
+    <button id='btnViewLogs' class='btn s' style='flex:1' onclick='openModal()'>View Session Logs</button>
+</div>
+</div>
+
+<!-- Modal for Logs -->
+<div id="logModal" class="modal">
+  <div class="modal-content">
+    <span class="close-modal" onclick="closeModal()">&times;</span>
+    <h2 id="logModalTitle" style="margin-bottom: 20px;">Session Logs</h2>
+    <table id='logs'>
+        <tr><th>Date</th><th>Start</th><th>End</th><th>Used</th><th>Remaining</th><th>Device</th><th>Timezone</th><th>Reason</th></tr>
+    </table>
+    <div style="margin-top: 20px; text-align: right;">
+        <button class="btn s" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN DASHBOARD -->
+<div id='admin' class='card hidden' style='margin-top:15px'>
+<div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>Admin Dashboard</h2>
+    <div class="row" style="align-items: center;">
+        <div class='theme-btn' onclick='toggleTheme()' style="position: static; margin-right: 10px;" title='Toggle Light/Dark Mode'>🌓</div>
+        <button class="btn s" onclick="goHome()">Logout</button>
+    </div>
+</div>
+
+<div style="margin-bottom: 30px;">
+    <h3>Manage Agents</h3>
+    <div class="row" style="margin-bottom: 10px;">
+        <input id="newAgentName" type="text" placeholder="Full Name" style="flex:1">
+        <input id="newAgentPin" type="text" placeholder="PIN" style="width:100px">
+        <button class="btn b" onclick="addAgent()">Add Agent</button>
+    </div>
+    <table id="agentManagementTable">
+        <tr><th>Agent Name</th><th>PIN</th><th>Actions</th></tr>
+    </table>
+</div>
+
+<div style="margin-bottom: 30px;">
+    <h3>Live Monitoring</h3>
+    <table id="adminDashboardTable">
+        <tr><th>Agent</th><th>Status</th><th>Remaining</th><th>Current Device</th><th>Timezone</th><th>Actions</th></tr>
+    </table>
+</div>
+
+<h3>Manual Controls</h3>
+<div class='row' style='margin-bottom:15px'>
+    <select id="adminAgentSelect" style="flex:1"></select>
+    <input id='adjVal' type='number' placeholder='Seconds (e.g. 300 or -300)' style='flex:1'>
+    <input id='adjReason' type='text' placeholder='Reason for adjustment' style='flex:1'>
+    <button class='btn y' onclick='applyAdjustment()'>Adjust Time</button>
+</div>
+<div id='adminDebug' class='muted' style='font-size:12px; margin-bottom:10px; line-height:1.4;'></div>
+<br>
+<div class='row'>
+    <button class='btn r' onclick='resetUser()'>Full Daily Reset</button>
+    <button class='btn s' onclick='exportCSV()'>Export CSV Logs</button>
+</div>
+</div>
+</div>
+<script>
+/* --- Configuration & State --- */
+const DAY_TOTAL = 5400;                // Total break allowance in seconds (90 minutes)
+const RESET_HOUR = 17;                 // Shift "New Day" trigger (5 PM / 17:00 local)
+const ADMIN_PASS = "1234";
+const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// Persistent user state
+let currentAgent = null;
+let viewingAgentLogsFor = null;
+let agentsList = JSON.parse(localStorage.getItem('bb3_agents') || '[{"name":"Angelo","pin":"1111"},{"name":"Mark","pin":"2222"}]');
+
+/* --- Utilities --- */
+// Formats raw seconds into HH:MM:SS string
+const fmt = (s) => {
+    const isNeg = s < 0;
+    const absS = Math.abs(s);
+    const h = Math.floor(absS / 3600), m = Math.floor((absS % 3600) / 60), x = absS % 60;
+    const ts = [h, m, x].map(v => String(v).padStart(2, '0')).join(':');
+    return isNeg ? `- ${ts}` : ts;
+};
+
+// Generates unique localStorage keys to prevent collisions
+const getKey = (k, agentName = currentAgent) => `bb3_${agentName}_${k}`;
+
+async function getDeviceInfo() {
+    // Generate or retrieve a persistent Device Token for this browser
+    let token = localStorage.getItem('bb3_device_token');
+    if (!token) {
+        token = 'DEV-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+        localStorage.setItem('bb3_device_token', token);
+    }
+
+    // Fetch public IP address
+    let ip = "0.0.0.0";
+    try {
+        const res = await fetch('https://api.ipify.org?format=json', { mode: 'cors' });
+        if (res.ok) {
+            const data = await res.json();
+            ip = data.ip;
+        }
+    } catch (e) { ip = "IP Blocked"; }
+
+    const ua = navigator.userAgent;
+    let os = ua.match(/Win/) ? "Win" : ua.match(/Mac/) ? "Mac" : ua.match(/Android/) ? "Andr" : ua.match(/iPhone|iPad/) ? "iOS" : "Linux";
+    return `${os} [${token}] (${ip})`;
+}
+
+/* --- Logic Functions --- */
+// Determines if a new shift day has started and resets data if needed
+function checkDaily(agentName = currentAgent) {
+    if (!agentName) return;
+    const now = new Date();
+
+    // Get current time components in the device's local timezone
+    const parts = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', hour12: false
+    }).formatToParts(now);
+
+    let p = {};
+    parts.forEach(part => p[part.type] = part.value);
+
+    // Determine the "effective shift day" based on the reset hour (5 PM)
+    let effDate = new Date(parseInt(p.year), parseInt(p.month) - 1, parseInt(p.day));
+    if (parseInt(p.hour) < RESET_HOUR) effDate.setDate(effDate.getDate() - 1);
+
+    const effDayStr = effDate.toDateString();
+    const lastReset = localStorage.getItem(getKey('lastResetDay', agentName));
+
+    if (effDayStr !== lastReset) {
+        localStorage.setItem(getKey('lastResetDay', agentName), effDayStr);
+        localStorage.setItem(getKey('remain', agentName), DAY_TOTAL);
+        localStorage.setItem(getKey('used', agentName), 0);
+        localStorage.setItem(getKey('count', agentName), 0);
+        localStorage.setItem(getKey('logs', agentName), '[]');
+        localStorage.setItem(getKey('start', agentName), 0);
+        localStorage.setItem(getKey('start_info', agentName), '');
+        localStorage.setItem(getKey('new_logs', agentName), '0');
+    }
+}
+
+// Updates the UI clock and the Admin debug monitor
+function updateClock() {
+    const now = new Date();
+    const dateOptions = {
+        year: 'numeric', month: 'short', day: 'numeric'
+    };
+    const timeOptions = {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false // Use 24-hour format
+    };
+    const dateStr = now.toLocaleString('en-US', dateOptions);
+    const timeStr = now.toLocaleString('en-US', timeOptions);
+
+    // Verification Debug Info for Admin
+    const adminEl = document.getElementById('admin');
+    const debugEl = document.getElementById('adminDebug');
+    if (adminEl && debugEl && !adminEl.classList.contains('hidden')) {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric', month: 'numeric', day: 'numeric',
+            hour: 'numeric', hour12: false
+        }).formatToParts(now);
+        let p = {};
+        parts.forEach(part => p[part.type] = part.value);
+        
+        let hourVal = parseInt(p.hour);
+        let eff = new Date(parseInt(p.year), parseInt(p.month) - 1, parseInt(p.day));
+        if (hourVal < RESET_HOUR) eff.setDate(eff.getDate() - 1);
+        
+        const targetName = currentAgent || document.getElementById('adminAgentSelect').value;
+        const lastReset = targetName ? (localStorage.getItem(getKey('lastResetDay', targetName)) || 'None') : 'N/A';
+        debugEl.innerHTML = `
+            <strong>System Time:</strong> ${timeStr}<br>
+            <strong>System Shift Date:</strong> ${eff.toDateString()}<br>
+            <strong>Agent Reset:</strong> ${lastReset}<br>
+            <span class="${eff.toDateString() === lastReset ? 'good' : 'warn'}">
+                ${eff.toDateString() === lastReset ? '✓ Timer is synced' : '⚠ Syncing shift...'}
+            </span>`;
+    }
+    
+    document.getElementById('clock').innerHTML = `${dateStr}<br>${timeStr}<br><small class='muted'>${LOCAL_TZ}</small>`;
+}
+
+function toggleTheme() {
+    document.body.classList.toggle('light-mode');
+    const isLight = document.body.classList.contains('light-mode');
+    localStorage.setItem('bb2_theme', isLight ? 'light' : 'dark');
+}
+
+// Entry point: Loads saved data and starts UI
+function initApp() {
+    const savedTheme = localStorage.getItem('bb2_theme');
+    if (savedTheme === 'light') document.body.classList.add('light-mode');
+    updateClock();
+}
+
+/* --- Navigation --- */
+function hideAll() {
+    ['portalSelect', 'agentLogin', 'adminLogin', 'mainCard', 'admin'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+    });
+}
+
+function goHome() {
+    currentAgent = null;
+    hideAll();
+    document.getElementById('portalSelect').classList.remove('hidden');
+}
+
+function showAgentLogin() {
+    hideAll();
+    const lastAgent = localStorage.getItem('bb3_last_agent');
+    const nameInput = document.getElementById('loginAgentName');
+    const pinInput = document.getElementById('loginAgentPin');
+    
+    if (lastAgent) {
+        nameInput.value = lastAgent;
+        setTimeout(() => pinInput.focus(), 50); // Focus PIN for faster access
+    }
+    document.getElementById('agentLogin').classList.remove('hidden');
+}
+
+function showAdminLogin() {
+    hideAll();
+    document.getElementById('adminLogin').classList.remove('hidden');
+}
+
+function authAdmin() {
+    const pass = document.getElementById('adminPasswordInput').value;
+    if (pass === ADMIN_PASS) {
+        hideAll();
+        document.getElementById('admin').classList.remove('hidden');
+        renderAdminDashboard();
+    } else {
+        alert("Incorrect Admin Password");
+    }
+}
+
+function authAgent() {
+    const name = document.getElementById('loginAgentName').value.trim();
+    const pin = document.getElementById('loginAgentPin').value.trim();
+    
+    const agent = agentsList.find(a => a.name.toLowerCase() === name.toLowerCase() && a.pin === pin);
+    
+    if (agent) {
+        currentAgent = agent.name;
+        localStorage.setItem('bb3_last_agent', currentAgent);
+        checkDaily();
+        hideAll();
+        document.getElementById('mainCard').classList.remove('hidden');
+        document.getElementById('hello').innerText = currentAgent;
+        render();
+        drawLogs();
+    } else {
+        alert("Invalid Name or PIN. Please contact your administrator.");
+    }
+}
+
+/* --- Modal Control --- */
+function openModal() {
+    localStorage.setItem(getKey('new_logs'), '0');
+    viewingAgentLogsFor = currentAgent;
+    document.getElementById('logModal').style.display = 'block';
+    drawLogs(currentAgent);
+    render();
+}
+
+function closeModal() {
+    document.getElementById('logModal').style.display = 'none';
+    viewingAgentLogsFor = null;
+}
+
+function render() {
+    if (!currentAgent) return;
+    // Retrieve base values from storage
+    const baseRemain = parseInt(localStorage.getItem(getKey('remain', currentAgent)) || DAY_TOTAL);
+    const baseUsed = parseInt(localStorage.getItem(getKey('used', currentAgent)) || 0);
+    const start = parseInt(localStorage.getItem(getKey('start', currentAgent)) || 0);
+    const count = localStorage.getItem(getKey('count', currentAgent)) || 0;
+    
+    let elapsed = 0;
+    if (start > 0) {
+        // If on break, calculate live elapsed time based on start timestamp
+        elapsed = Math.floor((Date.now() - start) / 1000);
+        document.getElementById('status').innerText = 'Status: On Break';
+    } else {
+        document.getElementById('status').innerText = 'Status: Available';
+    }
+
+    const r = baseRemain - elapsed;
+    const u = baseUsed + elapsed;
+
+    document.getElementById('timer').innerText = fmt(r);
+    document.getElementById('used').innerText = `Used: ${fmt(u)}`;
+    document.getElementById('sessions').innerText = `Sessions: ${count}`;
+    
+    // Button visual accuracy
+    const btnStart = document.getElementById('btnStart');
+    const btnEnd = document.getElementById('btnEnd');
+    if (start > 0) {
+        btnStart.disabled = true;
+        btnStart.classList.remove('btn-glow');
+        btnEnd.disabled = false;
+        btnEnd.classList.add('btn-glow');
+    } else {
+        btnStart.disabled = false;
+        btnStart.classList.add('btn-glow');
+        btnEnd.disabled = true;
+        btnEnd.classList.remove('btn-glow');
+    }
+
+    // Log button badge/color indicator
+    const btnLogs = document.getElementById('btnViewLogs');
+    const hasNew = localStorage.getItem(getKey('new_logs', currentAgent)) === '1';
+    btnLogs.className = `btn ${hasNew ? 'y' : 's'}`;
+    btnLogs.style.flex = '1';
+    btnLogs.innerText = hasNew ? 'View Session Logs (New!)' : 'View Session Logs';
+
+    const card = document.getElementById('mainCard');
+    const h = document.getElementById('health');
+    
+    card.classList.remove('breathe-good', 'breathe-warn', 'breathe-bad');
+
+    // Dynamic pulse speed: Faster as remaining time (r) decreases.
+    // Range: 4s at full 90m (5400s), down to 0.7s when empty or negative.
+    const pulseDuration = r <= 0 ? 0.7 : Math.max(0.7, Math.min(4, (r / DAY_TOTAL) * 4));
+    card.style.animationDuration = pulseDuration + 's';
+
+    h.className = r > 1800 ? 'good' : (r > 600 ? 'warn' : 'bad');
+    h.innerText = r > 1800 ? 'Healthy Balance' : (r > 600 ? 'Low Balance' : 'Critical Balance');
+    if (r > 1800) card.classList.add('breathe-good');
+    else if (r > 600) card.classList.add('breathe-warn');
+    else card.classList.add('breathe-bad');
+}
+
+// Records the timestamp when a break begins
+async function startBreak() {
+    if (!currentAgent) return;
+    const start = parseInt(localStorage.getItem(getKey('start')) || 0);
+    if (start > 0) return;
+    
+    // Immediate timestamp for UI
+    localStorage.setItem(getKey('start'), Date.now());
+    render();
+
+    // Capture device info at the exact start time
+    const info = await getDeviceInfo();
+    localStorage.setItem(getKey('start_info'), info);
+}
+
+// Calculates final break duration and updates persistent totals
+async function endBreak(agentName = currentAgent) {
+    if (!agentName) return;
+    const start = parseInt(localStorage.getItem(getKey('start', agentName)) || 0);
+    if (start === 0) return;
+
+    const end = Date.now();
+    const endInfo = await getDeviceInfo();
+    const startInfo = localStorage.getItem(getKey('start_info', agentName)) || endInfo;
+
+    const elapsed = Math.floor((end - start) / 1000);
+    const remain = parseInt(localStorage.getItem(getKey('remain', agentName)) || DAY_TOTAL);
+    const used = parseInt(localStorage.getItem(getKey('used', agentName)) || 0);
+    const count = parseInt(localStorage.getItem(getKey('count', agentName)) || 0);
+    const finalRemain = remain - elapsed;
+    const sessionUsed = elapsed;
+
+    // Compare start and end devices to check for swaps
+    let deviceLog = endInfo;
+    if (startInfo !== endInfo) {
+        deviceLog = `⚠️ SWAP! S:${startInfo} | E:${endInfo}`;
+    }
+
+    localStorage.setItem(getKey('remain', agentName), finalRemain);
+    localStorage.setItem(getKey('used', agentName), used + sessionUsed);
+    localStorage.setItem(getKey('count', agentName), count + 1);
+    localStorage.setItem(getKey('start', agentName), 0);
+    localStorage.removeItem(getKey('start_info', agentName));
+
+    const logs = JSON.parse(localStorage.getItem(getKey('logs', agentName)) || '[]');
+    const logDate = new Date().toLocaleDateString();
+    // Store current session details
+    logs.push({ d: logDate, s: new Date(start).toLocaleTimeString(), e: new Date(end).toLocaleTimeString(), u: fmt(sessionUsed), r: fmt(finalRemain), device: deviceLog, tz: LOCAL_TZ, reason: '' });
+    localStorage.setItem(getKey('new_logs', agentName), '1');
+    localStorage.setItem(getKey('logs', agentName), JSON.stringify(logs));
+    
+    render();
+    drawLogs(agentName);
+}
+
+// Populates the UI log table
+function drawLogs(agentName = currentAgent) {
+    if (!agentName) return;
+    const t = document.getElementById('logs');
+    const logs = JSON.parse(localStorage.getItem(getKey('logs', agentName)) || '[]');
+    
+    const title = document.getElementById('logModalTitle');
+    if (title) title.innerText = `Session Logs: ${agentName}`;
+
+    t.innerHTML = '<tr><th>Date</th><th>Start</th><th>End</th><th>Used</th><th>Remaining</th><th>Device</th><th>Timezone</th><th>Reason</th></tr>';
+    logs.forEach(r => {
+        let tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.d||'-'}</td><td>${r.s}</td><td>${r.e}</td><td>${r.u}</td><td>${r.r||'-'}</td><td><small>${r.device||'N/A'}</small></td><td><small>${r.tz||'Local'}</small></td><td>${r.reason||''}</td>`;
+        t.appendChild(tr);
+    });
+}
+
+function viewAgentLogs(agentName) {
+    viewingAgentLogsFor = agentName;
+    document.getElementById('logModal').style.display = 'block';
+    drawLogs(agentName);
+}
+
+// Internal helper to change the remaining balance
+function adjust(v) {
+    const r = parseInt(localStorage.getItem(getKey('remain')) || DAY_TOTAL);
+    localStorage.setItem(getKey('remain'), r + v);
+    render();
+}
+
+// Called by Admin "Adjust Time" button
+async function applyAdjustment() {
+    const target = document.getElementById('adminAgentSelect').value;
+    const val = parseInt(document.getElementById('adjVal').value);
+    const reason = document.getElementById('adjReason').value.trim();
+    
+    if (!target || isNaN(val)) return;
+    if (!reason) {
+        alert("Please provide a reason for the adjustment.");
+        return;
+    }
+
+    const dev = await getDeviceInfo();
+    const r = parseInt(localStorage.getItem(getKey('remain', target)) || DAY_TOTAL);
+    const newRemain = r + val;
+    localStorage.setItem(getKey('remain', target), newRemain);
+
+    const logs = JSON.parse(localStorage.getItem(getKey('logs', target)) || '[]');
+    const logDate = new Date().toLocaleDateString();
+    logs.push({ d: logDate, s: "Manual", e: "ADJ", u: fmt(val), r: fmt(newRemain), device: "Admin: " + dev, tz: LOCAL_TZ, reason: reason });
+    localStorage.setItem(getKey('new_logs', target), '1');
+    localStorage.setItem(getKey('logs', target), JSON.stringify(logs));
+
+    document.getElementById('adjVal').value = '';
+    document.getElementById('adjReason').value = '';
+    render();
+    renderAdminDashboard();
+}
+
+function addAgent() {
+    const nameInput = document.getElementById('newAgentName');
+    const pinInput = document.getElementById('newAgentPin');
+    const name = nameInput.value.trim();
+    const pin = pinInput.value.trim();
+    if (!name || !pin) return alert("Please enter both Name and PIN.");
+    if (agentsList.some(a => a.name.toLowerCase() === name.toLowerCase())) return alert("Agent already exists.");
+    agentsList.push({ name, pin });
+    localStorage.setItem('bb3_agents', JSON.stringify(agentsList));
+    nameInput.value = ''; pinInput.value = '';
+    renderAdminDashboard();
+}
+
+function deleteAgent(name) {
+    if (!confirm(`Are you sure you want to delete "${name}"? This will erase all their break history.`)) return;
+    agentsList = agentsList.filter(a => a.name !== name);
+    localStorage.setItem('bb3_agents', JSON.stringify(agentsList));
+    const keys = ['date', 'remain', 'used', 'count', 'logs', 'start', 'start_info', 'new_logs', 'lastResetDay'];
+    keys.forEach(k => localStorage.removeItem(`bb3_${name}_${k}`));
+    if (localStorage.getItem('bb3_last_agent') === name) localStorage.removeItem('bb3_last_agent');
+    renderAdminDashboard();
+}
+
+function editAgent(oldName) {
+    const agent = agentsList.find(a => a.name === oldName);
+    const newName = prompt("Edit Agent Name:", agent.name);
+    if (!newName || newName.trim() === "") return;
+    const newPin = prompt("Edit PIN:", agent.pin);
+    if (!newPin || newPin.trim() === "") return;
+    const trimmedNewName = newName.trim();
+    if (trimmedNewName !== oldName) {
+        if (agentsList.some(a => a.name.toLowerCase() === trimmedNewName.toLowerCase())) return alert("Name taken.");
+        const keys = ['date', 'remain', 'used', 'count', 'logs', 'start', 'start_info', 'new_logs', 'lastResetDay'];
+        keys.forEach(k => {
+            const val = localStorage.getItem(`bb3_${oldName}_${k}`);
+            if (val !== null) {
+                localStorage.setItem(`bb3_${trimmedNewName}_${k}`, val);
+                localStorage.removeItem(`bb3_${oldName}_${k}`);
+            }
+        });
+        if (localStorage.getItem('bb3_last_agent') === oldName) localStorage.setItem('bb3_last_agent', trimmedNewName);
+    }
+    agent.name = trimmedNewName;
+    agent.pin = newPin.trim();
+    localStorage.setItem('bb3_agents', JSON.stringify(agentsList));
+    renderAdminDashboard();
+}
+
+function renderAdminDashboard() {
+    const table = document.getElementById('adminDashboardTable');
+    const mgtTable = document.getElementById('agentManagementTable');
+    const select = document.getElementById('adminAgentSelect');
+    
+    table.innerHTML = '<tr><th>Agent</th><th>Status</th><th>Remaining</th><th>Current Device</th><th>Timezone</th><th>Actions</th></tr>';
+    mgtTable.innerHTML = '<tr><th>Agent Name</th><th>PIN</th><th>Actions</th></tr>';
+    select.innerHTML = '';
+
+    agentsList.forEach(agent => {
+        const name = agent.name;
+        checkDaily(name);
+        
+        const option = document.createElement('option');
+        option.value = name; option.textContent = name;
+        select.appendChild(option);
+
+        const mgtTr = document.createElement('tr');
+        mgtTr.innerHTML = `
+            <td>${name}</td>
+            <td><code>${agent.pin}</code></td>
+            <td>
+                <button class="btn s" style="padding:4px 8px; font-size:11px;" onclick="editAgent('${name}')">Edit</button>
+                <button class="btn r" style="padding:4px 8px; font-size:11px;" onclick="deleteAgent('${name}')">Delete</button>
+            </td>
+        `;
+        mgtTable.appendChild(mgtTr);
+
+        const start = parseInt(localStorage.getItem(getKey('start', name)) || 0);
+        const baseRemain = parseInt(localStorage.getItem(getKey('remain', name)) || DAY_TOTAL);
+        let liveRem = baseRemain;
+        let status = "Available";
+        let currentDev = localStorage.getItem(getKey('start_info', name)) || "---";
+
+        if (start > 0) {
+            liveRem = baseRemain - Math.floor((Date.now() - start) / 1000);
+            status = "On Break";
+        }
+
+        const tr = document.createElement('tr');
+        const colorClass = liveRem > 1800 ? 'good' : (liveRem > 600 ? 'warn' : 'bad');
+        const statusClass = status === 'On Break' ? 'warn' : 'good';
+        
+        tr.innerHTML = `
+            <td>${name}</td>
+            <td class="${statusClass}">${status}</td>
+            <td class="${colorClass}" style="font-family:monospace; font-weight:bold;">${fmt(liveRem)}</td>
+            <td><small>${currentDev}</small></td>
+            <td><small>${LOCAL_TZ}</small></td>
+            <td>
+                <button class="btn b" style="padding:4px 8px; font-size:11px;" onclick="viewAgentLogs('${name}')">Logs</button>
+                <button class="btn s" style="padding:4px 8px; font-size:11px;" onclick="resetUser('${name}')">Reset</button>
+                ${status === 'On Break' ? `<button class="btn r" style="padding:4px 8px; font-size:11px;" onclick="endBreak('${name}').then(renderAdminDashboard)">Force Stop</button>` : ''}
+            </td>
+        `;
+        table.appendChild(tr);
+    });
+}
+
+// Manually triggers a daily reset (useful for testing)
+function resetUser(agentName = currentAgent) {
+    if (!agentName) return;
+    const msg = "Are you sure you want to perform a full daily reset?\n\nThis will clear all logs for the current shift and reset your balance to 90 minutes.";
+    if (!confirm(msg)) return;
+    
+    localStorage.removeItem(getKey('lastResetDay', agentName)); // Remove the old key
+    checkDaily(agentName);
+    render();
+    if (!document.getElementById('admin').classList.contains('hidden')) renderAdminDashboard();
+}
+
+// Formats logs and triggers a browser download (Excel optimized)
+function exportCSV(agentName = currentAgent) {
+    if (!agentName) agentName = document.getElementById('adminAgentSelect').value;
+    if (!agentName) return;
+
+    const rows = JSON.parse(localStorage.getItem(getKey('logs', agentName)) || '[]');
+    const header = 'Date,Start,End,Used,Remaining,Device,Timezone,Reason\n';
+    // Format values with quotes to prevent Excel auto-formatting issues
+    const csvContent = rows.map(r => `"${r.d||''}","${r.s}","${r.e}","${r.u}","${r.r||''}","${r.device||''}","${r.tz||''}","${r.reason||''}"`).join('\n');
+
+    // Generate Date String MmmDDYYYY (e.g., Jan012024)
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+        month: 'short', day: '2-digit', year: 'numeric'
+    }).formatToParts(now);
+    const mmm = parts.find(p => p.type === 'month').value;
+    const dd = parts.find(p => p.type === 'day').value;
+    const yyyy = parts.find(p => p.type === 'year').value;
+    const dateStamp = `${mmm}${dd}${yyyy}`;
+
+    const a = document.createElement('a');
+    // Use UTF-8 BOM (\ufeff) to help Excel recognize the encoding immediately
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + header + csvContent], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `${agentName}_${dateStamp}.csv`;
+    a.click();
+}
+
+/* --- Core Loop & Event Listeners --- */
+setInterval(() => {
+    checkDaily();
+    render();
+    updateClock();
+    if (!document.getElementById('admin').classList.contains('hidden')) renderAdminDashboard();
+    if (viewingAgentLogsFor) drawLogs(viewingAgentLogsFor);
+}, 1000);
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    const modal = document.getElementById('logModal');
+    if (event.target == modal) closeModal();
+}
+
+// Initialize app on page load
+initApp();
+</script>
+</body>
+</html>
