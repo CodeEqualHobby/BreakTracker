@@ -360,31 +360,31 @@ async function endBreak() {
   const duration = Math.floor((now - startTime) / 1000);
 
   try {
-    // Calculate new totals
     const currentUsed = parseInt(agentCache.used || 0, 10);
+    const currentRemain = parseInt(agentCache.remain || DAY_TOTAL, 10);
     const currentCount = parseInt(agentCache.count || 0, 10);
 
-    // Update agent data in Firebase
+    const newRemain = Math.max(0, currentRemain - duration);
+
     await firebaseUpdate(`agents/${currentAgent}`, {
       start: 0,
       used: currentUsed + duration,
+      remain: newRemain,
       count: currentCount + 1,
       deviceInfo: info,
       tz: LOCAL_TZ,
       lastActivity: now
     });
 
-    // Add log entry
-    const logData = {
+    await firebasePush(`agents/${currentAgent}/logs`, {
       type: 'end',
       timestamp: now,
       duration: duration,
+      remaining: newRemain,
       deviceInfo: info,
       tz: LOCAL_TZ
-    };
-    await firebasePush(`agents/${currentAgent}/logs`, logData);
+    });
 
-    // Data will be updated via real-time listener
   } catch (error) {
     alert('Unable to end break: ' + error.message);
   }
@@ -653,7 +653,9 @@ async function forceEndBreak(agentName) {
     const duration = Math.floor((now - startTime) / 1000);
     const currentUsed = parseInt(agentData.used || 0, 10);
     const currentCount = parseInt(agentData.count || 0, 10);
-
+    const currentRemain = parseInt(agentData.remain || DAY_TOTAL, 10);
+    const newRemain = Math.max(0, currentRemain - duration);
+    
     // Update agent data
     await firebaseUpdate(`agents/${agentName}`, {
       start: 0,
