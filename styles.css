@@ -1,0 +1,220 @@
+:root {
+  --bg: #0b1220;
+  --text: #e5e7eb;
+  --card-bg: #111827;
+  --muted: #94a3b8;
+  --border: #374151;
+  --input-bg: #0b1220;
+}
+
+.light-mode {
+  --bg: #f3f4f6;
+  --text: #111827;
+  --card-bg: #ffffff;
+  --muted: #4b5563;
+  --border: #d1d5db;
+  --input-bg: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.3s, color 0.3s;
+}
+
+.wrap {
+  max-width: 920px;
+  margin: auto;
+  padding: 20px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+  position: relative;
+  border: 3px solid var(--border);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+
+h1, h2 { margin: 0 0 10px; }
+h1 { padding-left: 35px; }
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.g { background: #16a34a; color: #fff; }
+.r { background: #dc2626; color: #fff; }
+.b { background: #2563eb; color: #fff; }
+.y { background: #ca8a04; color: #fff; }
+.s { background: #334155; color: #fff; }
+
+.timer {
+  font-size: clamp(32px, 10vw, 56px);
+  font-weight: 800;
+  text-align: center;
+  margin: 16px 0;
+}
+
+.muted { color: var(--muted); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.hidden { display: none; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #374151;
+  padding: 8px;
+  text-align: left;
+}
+
+input, select {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+}
+
+.good { color: #22c55e; }
+.warn { color: #f59e0b; }
+.bad { color: #ef4444; }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(0.8); }
+.btn-glow { box-shadow: 0 0 15px rgba(255, 255, 255, 0.4); }
+
+.card.breathe-good { animation: breathe-good 4s infinite ease-in-out; }
+.card.breathe-warn { animation: breathe-warn 4s infinite ease-in-out; }
+.card.breathe-bad { animation: breathe-bad 4s infinite ease-in-out; }
+
+@keyframes breathe-good {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: #22c55e; }
+}
+
+@keyframes breathe-warn {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: #f59e0b; }
+}
+
+@keyframes breathe-bad {
+  0%, 100% { border-color: var(--border); }
+  50% { border-color: #ef4444; }
+}
+
+.clock {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  text-align: right;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.theme-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  cursor: pointer;
+  font-size: 20px;
+  z-index: 10;
+}
+
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .clock {
+    position: static;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .row {
+    flex-direction: column;
+  }
+  .row .btn, .row input, .row select {
+    width: 100%;
+  }
+  .modal-content {
+    width: 95%;
+    padding: 15px;
+  }
+  table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background-color: #111827;
+  margin: 5% auto;
+  padding: 25px;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 850px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  border: 1px solid var(--border);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.close-modal {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  font-size: 28px;
+  font-weight: bold;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.close-modal:hover { color: #e5e7eb; }
+
+.portal-select {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.portal-select h1 { padding-left: 0; margin-bottom: 30px; }
