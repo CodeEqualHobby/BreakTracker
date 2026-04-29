@@ -773,3 +773,21 @@ window.onclick = function(event) {
 };
 
 window.addEventListener('load', initApp);
+window.showAgentLogin = showAgentLogin;
+window.showAdminLogin = showAdminLogin;
+window.goHome = goHome;
+window.authAdmin = authAdmin;
+window.authAgent = authAgent;
+window.startBreak = startBreak;
+window.endBreak = endBreak;
+window.openModal = openModal;
+window.closeModal = closeModal;
+window.applyAdjustment = applyAdjustment;
+window.addAgent = addAgent;
+window.editAgent = editAgent;
+window.deleteAgent = deleteAgent;
+window.viewAgentLogs = viewAgentLogs;
+window.forceEndBreak = forceEndBreak;
+window.resetUser = resetUser;
+window.exportCSV = exportCSV;
+window.toggleTheme = toggleTheme;
