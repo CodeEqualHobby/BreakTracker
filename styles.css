@@ -138,13 +138,25 @@ input, select {
   line-height: 1.4;
 }
 
-.theme-btn {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  cursor: pointer;
-  font-size: 20px;
-  z-index: 10;
+.theme-btn{
+    position: static;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    font-size:20px;
+    background:#1f2937;
+    color:white;
+    border:1px solid rgba(255,255,255,.15);
+    transition:0.2s ease;
+}
+
+.theme-btn:hover{
+    transform:scale(1.08);
+    background:#2563eb;
 }
 
 @media (max-width: 600px) {
