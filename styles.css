@@ -232,9 +232,16 @@ input, select {
 .portal-select h1 { padding-left: 0; margin-bottom: 30px; }
 
 .clock{
-    font-size:14px;
-    opacity:.9;
-    line-height:1.5;
+position:relative;
+margin:0 auto 15px auto;
+text-align:center;
+font-size:14px;
+line-height:1.4;
+display:block;
+width:fit-content;
+padding:8px 14px;
+border-radius:12px;
+background:rgba(255,255,255,0.08);
 }
 
 .clock-center{
