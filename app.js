@@ -30,7 +30,7 @@ const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 // Constants
 const DAY_TOTAL = 5400;
-const RESET_HOUR = 17;
+const RESET_HOUR = 16;
 const ADMIN_PASS = "1234";
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -38,6 +38,8 @@ let currentAgent = null;
 let viewingAgentLogsFor = null;
 let agentCache = null;
 let adminLoggedIn = false;
+let allAgentsCache = null;
+let adminUnsubscribe = null;
 let agentListener = null; // For real-time updates
 
 const fmt = (s) => {
@@ -111,6 +113,44 @@ async function firebasePush(path, data) {
   }
 }
 
+/**
+ * Calculates the most recent 16:00 Manila (UTC+8) threshold.
+ * 16:00 Manila is always 08:00 UTC.
+ */
+function getManilaResetThreshold() {
+  const now = new Date();
+  const threshold = new Date(now);
+  threshold.setUTCHours(RESET_HOUR - 8, 0, 0, 0);
+  
+  if (now.getTime() < threshold.getTime()) {
+    threshold.setUTCDate(threshold.getUTCDate() - 1);
+  }
+  return threshold.getTime();
+}
+
+async function checkAndPerformReset(agentName, agentData) {
+  if (!agentName || !agentData) return agentData;
+  
+  const threshold = getManilaResetThreshold();
+  const lastReset = agentData.lastReset || 0;
+
+  if (lastReset < threshold) {
+    const now = Date.now();
+    const updateData = {
+      remain: DAY_TOTAL,
+      used: 0,
+      count: 0,
+      start: 0,
+      lastActivity: now,
+      lastReset: now,
+      logs: {} // Clear logs on reset
+    };
+    await firebaseUpdate(`agents/${agentName}`, updateData);
+    return { ...agentData, ...updateData };
+  }
+  return agentData;
+}
+
 function updateClock() {
   const now = new Date();
   const dateOptions = { year: 'numeric', month: 'short', day: 'numeric' };
@@ -142,11 +182,16 @@ function goHome() {
   currentAgent = null;
   agentCache = null;
   adminLoggedIn = false;
+  allAgentsCache = null;
   viewingAgentLogsFor = null;
 
   // Clean up Firebase listener
   if (agentListener) {
-    // Firebase listeners auto-cleanup, but we reset the reference
+    agentListener();
+    agentListener = null;
+  }
+  if (adminUnsubscribe) {
+    adminUnsubscribe();
     agentListener = null;
   }
 
@@ -190,11 +235,26 @@ async function authAdmin() {
     }
     adminLoggedIn = true;
     hideAll();
+    setupAdminListener();
     document.getElementById('admin').classList.remove('hidden');
-    renderAdminDashboard();
   } catch (error) {
     alert('Unable to authenticate admin: ' + error.message);
   }
+}
+
+function setupAdminListener() {
+  if (!adminLoggedIn) return;
+  
+  const agentsRef = ref(database, 'agents');
+  adminUnsubscribe = onValue(agentsRef, async (snapshot) => {
+    const data = snapshot.val() || {};
+    // Perform reset check for all agents when data changes
+    for (const name in data) {
+      data[name] = await checkAndPerformReset(name, data[name]);
+    }
+    allAgentsCache = data;
+    renderAdminDashboard();
+  });
 }
 
 async function authAgent() {
@@ -222,7 +282,6 @@ async function authAgent() {
     hideAll();
     document.getElementById('mainCard').classList.remove('hidden');
     document.getElementById('hello').innerText = currentAgent;
-    drawLogs();
   } catch (error) {
     alert('Authentication failed: ' + error.message);
   }
@@ -240,10 +299,11 @@ function setupAgentListener() {
 
   // Set up real-time listener for this agent's data
   const agentRef = ref(database, `agents/${currentAgent}`);
-  agentListener = onValue(agentRef, (snapshot) => {
+  agentListener = onValue(agentRef, async (snapshot) => {
     const data = snapshot.val();
     if (data) {
-      agentCache = data;
+      const checkedData = await checkAndPerformReset(currentAgent, data);
+      agentCache = checkedData;
       render(); // Update UI when data changes
     }
   });
@@ -252,7 +312,8 @@ function setupAgentListener() {
 async function refreshAgentData(force = false) {
   if (!currentAgent) return;
   try {
-    const data = await firebaseGet(`agents/${currentAgent}`);
+    let data = await firebaseGet(`agents/${currentAgent}`);
+    data = await checkAndPerformReset(currentAgent, data);
     agentCache = data;
     if (force) render();
     return data;
@@ -298,12 +359,6 @@ async function render() {
     btnEnd.disabled = true;
     btnEnd.classList.remove('btn-glow');
   }
-
-  const btnLogs = document.getElementById('btnViewLogs');
-  const hasNew = agentCache.logsCount > 0 && agentCache.lastViewed !== agentCache.logsCount;
-  btnLogs.className = `btn ${hasNew ? 'y' : 's'}`;
-  btnLogs.style.flex = '1';
-  btnLogs.innerText = hasNew ? 'View Session Logs (New!)' : 'View Session Logs';
 
   const card = document.getElementById('mainCard');
   const h = document.getElementById('health');
@@ -357,17 +412,19 @@ async function endBreak() {
   const info = await getDeviceInfo();
   const now = Date.now();
   const startTime = agentCache.start;
+  const sessionId = agentCache.currentSessionId;
   const duration = Math.floor((now - startTime) / 1000);
+  const isoEnd = new Date(now).toISOString();
 
   try {
     const currentUsed = parseInt(agentCache.used || 0, 10);
     const currentRemain = parseInt(agentCache.remain || DAY_TOTAL, 10);
     const currentCount = parseInt(agentCache.count || 0, 10);
-
-    const newRemain = Math.max(0, currentRemain - duration);
+    const newRemain = currentRemain - duration;
 
     await firebaseUpdate(`agents/${currentAgent}`, {
       start: 0,
+      currentSessionId: null,
       used: currentUsed + duration,
       remain: newRemain,
       count: currentCount + 1,
@@ -376,14 +433,12 @@ async function endBreak() {
       lastActivity: now
     });
 
-    await firebasePush(`agents/${currentAgent}/logs`, {
-      type: 'end',
-      timestamp: now,
-      duration: duration,
-      remaining: newRemain,
-      deviceInfo: info,
-      tz: LOCAL_TZ
-    });
+    if (sessionId) {
+      await firebaseUpdate(`agents/${currentAgent}/logs/${sessionId}`, {
+        endTime: isoEnd,
+        duration: duration
+      });
+    }
 
   } catch (error) {
     alert('Unable to end break: ' + error.message);
@@ -397,38 +452,26 @@ async function drawLogs(agentName = currentAgent) {
     const logs = agentData?.logs || {};
 
     const table = document.getElementById('logs');
-    table.innerHTML = '<tr><th>Date</th><th>Start</th><th>End</th><th>Used</th><th>Remaining</th><th>Device</th><th>Timezone</th><th>Reason</th></tr>';
+    table.innerHTML = '<tr><th>Start Time</th><th>End Time</th><th>Duration (Min)</th><th>Device Token</th></tr>';
 
     // Convert logs object to array and sort by timestamp
-    const logEntries = Object.values(logs).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    const logEntries = Object.values(logs).sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
 
     logEntries.forEach(log => {
-      const date = log.timestamp ? new Date(log.timestamp).toLocaleDateString() : '-';
-      const startTime = log.type === 'start' ? new Date(log.timestamp).toLocaleTimeString() : '-';
-      const endTime = log.type === 'end' ? new Date(log.timestamp).toLocaleTimeString() : '-';
-      const used = log.type === 'end' ? fmt(log.duration || 0) : '-';
-      const remaining = '-'; // Would need to calculate based on context
-      const device = log.deviceInfo || 'N/A';
-      const tz = log.tz || 'Local';
-      const reason = log.type === 'start' ? 'Break Started' : 'Break Ended';
-
+      const start = log.startTime ? new Date(log.startTime).toLocaleTimeString() : '---';
+      const end = log.endTime ? new Date(log.endTime).toLocaleTimeString() : 'In Progress';
+      const dur = log.duration ? (log.duration / 60).toFixed(2) : '---';
+      
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${date}</td>
-        <td>${startTime}</td>
-        <td>${endTime}</td>
-        <td>${used}</td>
-        <td>${remaining}</td>
-        <td><small>${device}</small></td>
-        <td><small>${tz}</small></td>
-        <td>${reason}</td>
+        <td>${start}</td>
+        <td>${end}</td>
+        <td>${dur}</td>
+        <td><code>${log.deviceToken || '---'}</code></td>
       `;
       table.appendChild(tr);
     });
 
-    if (viewingAgentLogsFor === agentName && agentCache) {
-      agentCache.lastViewed = logEntries.length;
-    }
   } catch (error) {
     console.error('Failed to load logs:', error);
   }
@@ -474,17 +517,6 @@ async function applyAdjustment() {
       lastActivity: now
     });
 
-    // Add adjustment log entry
-    const logData = {
-      type: 'adjustment',
-      timestamp: now,
-      adjustment: val,
-      reason: reason,
-      deviceInfo: `Admin: ${dev}`,
-      tz: LOCAL_TZ
-    };
-    await firebasePush(`agents/${target}/logs`, logData);
-
     document.getElementById('adjVal').value = '';
     document.getElementById('adjReason').value = '';
     renderAdminDashboard();
@@ -518,6 +550,7 @@ async function addAgent() {
       count: 0,
       start: 0,
       lastActivity: Date.now(),
+      lastReset: Date.now(),
       logs: {}
     };
 
@@ -581,18 +614,26 @@ async function editAgent(oldName) {
   }
 }
 
-async function renderAdminDashboard() {
+function renderAdminDashboard() {
   if (!adminLoggedIn) return;
-  try {
-    const agents = await firebaseGet('agents') || {};
-    const agentList = Object.values(agents);
+  if (!allAgentsCache) return;
 
-    const table = document.getElementById('adminDashboardTable');
+  try {
+    const searchTerm = document.getElementById('adminSearchInput').value.toLowerCase();
+    const agentList = Object.values(allAgentsCache);
+    const filteredAgents = agentList.filter(a => a.name.toLowerCase().includes(searchTerm));
+
+    const tableBody = document.getElementById('adminDashboardBody');
     const mgtTable = document.getElementById('agentManagementTable');
     const select = document.getElementById('adminAgentSelect');
 
-    table.innerHTML = '<tr><th>Agent</th><th>Status</th><th>Remaining</th><th>Current Device</th><th>Timezone</th><th>Actions</th></tr>';
+    // Cache select's current value to restore it
+    const currentSelected = select.value;
+
+    if (tableBody) tableBody.innerHTML = '';
     mgtTable.innerHTML = '<tr><th>Agent Name</th><th>PIN</th><th>Actions</th></tr>';
+    
+    // Only rebuild select options if the agent list size changed to avoid flicker
     select.innerHTML = '';
 
     agentList.forEach(agent => {
@@ -611,29 +652,37 @@ async function renderAdminDashboard() {
         </td>
       `;
       mgtTable.appendChild(mgtTr);
+    });
 
+    select.value = currentSelected;
+
+    filteredAgents.forEach(agent => {
       const remain = parseInt(agent.remain || DAY_TOTAL, 10);
       const start = parseInt(agent.start || 0, 10);
-      const status = start > 0 ? 'On Break' : 'Available';
+      const status = start > 0 ? 'On Break' : 'Working';
       const elapsed = start > 0 ? Math.floor((Date.now() - start) / 1000) : 0;
       const currentRemain = remain - elapsed;
+      
+      const lastAction = agent.lastActivity ? new Date(agent.lastActivity).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
+      const tokenMatch = agent.deviceInfo?.match(/\[(.*?)\]/);
+      const token = tokenMatch ? tokenMatch[1] : '---';
 
       const colorClass = currentRemain > 1800 ? 'good' : (currentRemain > 600 ? 'warn' : 'bad');
-      const statusClass = status === 'On Break' ? 'warn' : 'good';
+      const statusClass = status === 'On Break' ? 'bad' : 'good';
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${agent.name}</td>
-        <td class="${statusClass}">${status}</td>
         <td class="${colorClass}" style="font-family:monospace; font-weight:bold;">${fmt(currentRemain)}</td>
-        <td><small>${agent.deviceInfo || '---'}</small></td>
-        <td><small>${agent.tz || LOCAL_TZ}</small></td>
+        <td class="${statusClass}">${status}</td>
+        <td><small>${lastAction}</small></td>
+        <td><code>${token}</code></td>
         <td>
           <button class="btn b" style="padding:4px 8px; font-size:11px;" onclick="viewAgentLogs('${agent.name}')">Logs</button>
           <button class="btn s" style="padding:4px 8px; font-size:11px;" onclick="resetUser('${agent.name}')">Reset</button>
           ${status === 'On Break' ? `<button class="btn r" style="padding:4px 8px; font-size:11px;" onclick="forceEndBreak('${agent.name}')">Force Stop</button>` : ''}
         </td>
       `;
-      table.appendChild(tr);
+      tableBody.appendChild(tr);
     });
   } catch (error) {
     console.error('Unable to render admin dashboard:', error);
@@ -651,31 +700,29 @@ async function forceEndBreak(agentName) {
     const now = Date.now();
     const startTime = agentData.start;
     const duration = Math.floor((now - startTime) / 1000);
+    const sessionId = agentData.currentSessionId;
     const currentUsed = parseInt(agentData.used || 0, 10);
     const currentCount = parseInt(agentData.count || 0, 10);
     const currentRemain = parseInt(agentData.remain || DAY_TOTAL, 10);
-    const newRemain = Math.max(0, currentRemain - duration);
+    const newRemain = currentRemain - duration;
     
     // Update agent data
     await firebaseUpdate(`agents/${agentName}`, {
       start: 0,
+      currentSessionId: null,
       used: currentUsed + duration,
       count: currentCount + 1,
       deviceInfo: 'Admin Force',
       tz: LOCAL_TZ,
       lastActivity: now
     });
-
-    // Add log entry
-    const logData = {
-      type: 'end',
-      timestamp: now,
-      duration: duration,
-      deviceInfo: 'Admin Force',
-      tz: LOCAL_TZ,
-      reason: 'Forced by admin'
-    };
-    await firebasePush(`agents/${agentName}/logs`, logData);
+    
+    if (sessionId) {
+      await firebaseUpdate(`agents/${agentName}/logs/${sessionId}`, {
+        endTime: new Date(now).toISOString(),
+        duration: duration
+      });
+    }
 
     renderAdminDashboard();
     if (currentAgent === agentName) await refreshAgentData(true);
@@ -699,61 +746,16 @@ async function resetUser(agentName = currentAgent) {
       used: 0,
       count: 0,
       start: 0,
-      lastActivity: now
+      currentSessionId: null,
+      lastActivity: now,
+      lastReset: now,
+      logs: {}
     });
-
-    // Add reset log entry
-    const logData = {
-      type: 'reset',
-      timestamp: now,
-      deviceInfo: 'Admin Reset',
-      tz: LOCAL_TZ,
-      reason: 'Daily reset by admin'
-    };
-    await firebasePush(`agents/${agentName}/logs`, logData);
 
     if (currentAgent === agentName) await refreshAgentData(true);
     renderAdminDashboard();
   } catch (error) {
     alert('Unable to reset the user: ' + error.message);
-  }
-}
-
-async function exportCSV(agentName = currentAgent) {
-  if (!agentName) return;
-  try {
-    const agentData = await firebaseGet(`agents/${agentName}`);
-    const logs = agentData?.logs || {};
-
-    // Convert logs object to array and sort by timestamp
-    const logEntries = Object.values(logs).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-    const header = 'Date,Start,End,Used,Remaining,Device,Timezone,Reason\n';
-    const csvContent = logEntries.map(log => {
-      const date = log.timestamp ? new Date(log.timestamp).toLocaleDateString() : '';
-      const startTime = log.type === 'start' ? new Date(log.timestamp).toLocaleTimeString() : '';
-      const endTime = log.type === 'end' ? new Date(log.timestamp).toLocaleTimeString() : '';
-      const used = log.type === 'end' ? fmt(log.duration || 0) : '';
-      const remaining = ''; // Would need to calculate based on context
-      const device = log.deviceInfo || '';
-      const tz = log.tz || '';
-      const reason = log.type === 'start' ? 'Break Started' : (log.type === 'end' ? 'Break Ended' : (log.reason || ''));
-
-      return `"${date}","${startTime}","${endTime}","${used}","${remaining}","${device}","${tz}","${reason}"`;
-    }).join('\n');
-
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).formatToParts(now);
-    const mmm = parts.find(p => p.type === 'month').value;
-    const dd = parts.find(p => p.type === 'day').value;
-    const yyyy = parts.find(p => p.type === 'year').value;
-    const dateStamp = `${mmm}${dd}${yyyy}`;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob(['\ufeff' + header + csvContent], { type: 'text/csv;charset=utf-8;' }));
-    a.download = `${agentName}_${dateStamp}.csv`;
-    a.click();
-  } catch (error) {
-    alert('Unable to export CSV: ' + error.message);
   }
 }
 
@@ -791,5 +793,4 @@ window.deleteAgent = deleteAgent;
 window.viewAgentLogs = viewAgentLogs;
 window.forceEndBreak = forceEndBreak;
 window.resetUser = resetUser;
-window.exportCSV = exportCSV;
 window.toggleTheme = toggleTheme;
