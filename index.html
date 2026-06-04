@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Break Tracker</title>
 <link rel="stylesheet" href="styles.css">
+<!-- Typography: Inter for UI, Orbitron for Digital Clock -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <div class='wrap'>
-
-<!-- STARTUP PORTAL SELECTION -->
+    <!-- STARTUP PORTAL SELECTION -->
 <div id="portalSelect" class="card portal-select">
     <h1>Break Tracker</h1>
     <p class="muted">Please select your portal to continue</p>
@@ -42,36 +45,33 @@
 
 <!-- AGENT MAIN INTERFACE -->
 <div id='mainCard' class='card hidden'>
-<div class='row' style="justify-content: space-between; margin-bottom: 10px;">
-    <button class="btn s" onclick="goHome()">Logout</button>
-    <div class='theme-btn' onclick='toggleTheme()' style="position: static;" title='Toggle Light/Dark Mode'>🌓</div>
-</div>
-<h1>Break Tracker</h1>
-<div class='muted'>Personal Break Timer</div>
+    <div class='row header-actions'>
+        <button class="btn-text" onclick="goHome()">Logout</button>
+        <div class='theme-btn' onclick='toggleTheme()' title='Toggle Light/Dark Mode'>🌓
+        </div>
+    </div>
 
-<div id='clock' class='clock clock-center'></div>
-<br>
+    <div class="agent-header">
+        <div id='clock' class='clock'></div>
+        <h2 id='hello' class="agent-name">Agent</h2>
+    </div>
 
-<div class='grid'>
-<div>
-<h2 id='hello'>Agent</h2>
-<div class='timer' id='timer'>01:30:00</div>
-<div id='status'>Status: Available</div><br>
-<div class='row'>
-<button id='btnStart' class='btn g' onclick='startBreak()'>Start Break</button>
-<button id='btnEnd' class='btn r' onclick='endBreak()'>End Break</button>
-</div>
-</div>
+    <div class='timer-container'>
+        <div id='status' class="status-indicator">Available</div>
+        <div class='timer' id='timer'>00:00:00</div>
+        <div class='row' style="justify-content: center; gap: 20px;">
+            <button id='btnStart' class='btn g' onclick='startBreak()'>Start Break</button>
+            <button id='btnEnd' class='btn r' onclick='endBreak()'>End Break</button>
+        </div>
+    </div>
+
+    <div class='grid stats-grid'>
 <div>
 <h2>Today Stats</h2>
 <div id='used'>Used: 00:00:00</div>
 <div id='sessions'>Sessions: 0</div>
 <div id='health' class='good'>Healthy Balance</div>
 </div>
-</div>
-
-<div class='row' style='margin-top:20px'>
-    <button id='btnViewLogs' class='btn s' style='flex:1' onclick='openModal()'>View Session Logs</button>
 </div>
 </div>
 
@@ -81,7 +81,7 @@
     <span class="close-modal" onclick="closeModal()">&times;</span>
     <h2 id="logModalTitle" style="margin-bottom: 20px;">Session Logs</h2>
     <table id='logs'>
-        <tr><th>Date</th><th>Start</th><th>End</th><th>Used</th><th>Remaining</th><th>Device</th><th>Timezone</th><th>Reason</th></tr>
+        <tr><th>Start Time</th><th>End Time</th><th>Duration (Min)</th><th>Device Token</th></tr>
     </table>
     <div style="margin-top: 20px; text-align: right;">
         <button class="btn s" onclick="closeModal()">Close</button>
@@ -113,8 +113,12 @@
 
 <div style="margin-bottom: 30px;">
     <h3>Live Monitoring</h3>
+    <div class="row" style="margin-bottom: 15px; gap: 10px;">
+        <input id="adminSearchInput" type="text" placeholder="Filter by agent name..." style="flex: 2; padding: 10px;" oninput="renderAdminDashboard()">
+    </div>
     <table id="adminDashboardTable">
-        <tr><th>Agent</th><th>Status</th><th>Remaining</th><th>Current Device</th><th>Timezone</th><th>Actions</th></tr>
+        <thead><tr><th>Agent Name</th><th>Remaining Time</th><th>Status</th><th>Last Action</th><th>Device Token</th><th>Actions</th></tr></thead>
+        <tbody id="adminDashboardBody"></tbody>
     </table>
 </div>
 
@@ -129,7 +133,6 @@
 <br>
 <div class='row'>
     <button class='btn r' onclick='resetUser(document.getElementById("adminAgentSelect").value)'>Full Time Reset</button>
-    <button class='btn s' onclick='exportCSV(document.getElementById("adminAgentSelect").value)'>Export CSV Logs</button>
 </div>
 </div>
 </div>
