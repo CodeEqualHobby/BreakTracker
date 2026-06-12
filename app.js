@@ -18,9 +18,10 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 // ==================== Globals ====================
-const DAY_TOTAL = 5400; // 90 minutes in seconds
+const DAY_TOTAL = 5400;
 let currentName = localStorage.getItem('bb2_name') || 'Agent';
 let activeLogAgent = '';
+let isAdmin = false;
 
 // ==================== Utilities ====================
 const fmt = (s) => {
@@ -50,20 +51,66 @@ function updateClock() {
 
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric', 
-        timeZone: 'Asia/Manila' 
+        year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Manila' 
     });
     const timeStr = now.toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        second: '2-digit', 
-        hour12: false, 
-        timeZone: 'Asia/Manila' 
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Manila' 
     });
 
     clockEl.innerHTML = `${dateStr}<br>${timeStr}<br><small class="muted">Asia/Manila</small>`;
+}
+
+// ==================== Portal Navigation ====================
+function hideAll() {
+    document.querySelectorAll('.card').forEach(card => card.classList.add('hidden'));
+}
+
+function showAgentLogin() {
+    hideAll();
+    document.getElementById('agentLogin').classList.remove('hidden');
+}
+
+function showAdminLogin() {
+    hideAll();
+    document.getElementById('adminLogin').classList.remove('hidden');
+}
+
+function goHome() {
+    hideAll();
+    document.getElementById('portalSelect').classList.remove('hidden');
+    isAdmin = false;
+}
+
+// ==================== Authentication (Basic) ====================
+function authAgent() {
+    const name = document.getElementById('loginAgentName').value.trim();
+    const pin = document.getElementById('loginAgentPin').value.trim();
+
+    if (!name) {
+        alert("Please enter your name");
+        return;
+    }
+
+    currentName = name;
+    localStorage.setItem('bb2_name', name);
+
+    hideAll();
+    document.getElementById('mainCard').classList.remove('hidden');
+    document.getElementById('hello').textContent = currentName;
+}
+
+function authAdmin() {
+    const password = document.getElementById('adminPasswordInput').value;
+    
+    // Change this password as needed
+    if (password === "admin123") {  
+        isAdmin = true;
+        hideAll();
+        document.getElementById('admin').classList.remove('hidden');
+        renderAdminDashboard();
+    } else {
+        alert("Incorrect admin password");
+    }
 }
 
 // ==================== Break Functions ====================
@@ -72,7 +119,7 @@ async function startBreak() {
     const snapshot = await get(agentRef);
     const data = snapshot.val();
 
-    if (data?.start > 0) return; // Already on break
+    if (data?.start > 0) return;
 
     await update(agentRef, {
         start: Date.now(),
@@ -96,22 +143,16 @@ async function endBreak() {
 
     const logEntry = {
         d: new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Manila' }),
-        s: new Date(start).toLocaleTimeString('en-US', { 
-            hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' 
-        }),
-        e: new Date(end).toLocaleTimeString('en-US', { 
-            hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' 
-        }),
+        s: new Date(start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' }),
+        e: new Date(end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Manila' }),
         u: fmt(elapsed),
         r: fmt(newRemain),
         device: getDeviceInfo(),
         timestamp: end
     };
 
-    // Save log
     await push(ref(db, `agents/${currentName}/logs`), logEntry);
 
-    // Update agent
     await update(agentRef, {
         start: 0,
         used: newUsed,
@@ -122,7 +163,7 @@ async function endBreak() {
     });
 }
 
-// ==================== Admin Functions ====================
+// ==================== Admin Functions (Logs + Export) ====================
 function renderAdminDashboard() {
     const container = document.getElementById('adminDashboardBody');
     if (!container) return;
@@ -139,9 +180,7 @@ function renderAdminDashboard() {
                 <td>${fmt(a.remain || 0)}</td>
                 <td>${fmt(a.used || 0)}</td>
                 <td>${a.count || 0}</td>
-                <td>
-                    <button class="btn s" onclick="viewAgentLogs('${name}')">View Logs</button>
-                </td>
+                <td><button class="btn s" onclick="viewAgentLogs('${name}')">View Logs</button></td>
             `;
             container.appendChild(row);
         });
@@ -169,27 +208,14 @@ async function drawLogs(agentName) {
     const table = document.getElementById('logs');
     if (!table) return;
 
-    table.innerHTML = `
-        <tr>
-            <th>Date</th>
-            <th>Start</th>
-            <th>End</th>
-            <th>Used</th>
-            <th>Remaining</th>
-            <th>Device</th>
-        </tr>`;
+    table.innerHTML = `<tr><th>Date</th><th>Start</th><th>End</th><th>Used</th><th>Remaining</th><th>Device</th></tr>`;
 
-    const logsQuery = query(
-        ref(db, `agents/${agentName}/logs`), 
-        orderByChild('timestamp'), 
-        limitToLast(100)
-    );
-
+    const logsQuery = query(ref(db, `agents/${agentName}/logs`), orderByChild('timestamp'), limitToLast(100));
     const snapshot = await get(logsQuery);
     const logs = snapshot.val();
 
     if (!logs) {
-        table.innerHTML += `<tr><td colspan="6" style="text-align:center; padding:20px;">No logs found.</td></tr>`;
+        table.innerHTML += `<tr><td colspan="6" style="text-align:center;padding:20px;">No logs found.</td></tr>`;
         return;
     }
 
@@ -208,76 +234,71 @@ async function drawLogs(agentName) {
 }
 
 async function exportCSV() {
-    if (!activeLogAgent) {
-        alert("Please open an agent's logs first.");
-        return;
-    }
-
+    if (!activeLogAgent) return alert("Please open logs first.");
+    
     const snapshot = await get(ref(db, `agents/${activeLogAgent}/logs`));
     const logsData = snapshot.val();
-
-    if (!logsData) {
-        alert("No logs available to export.");
-        return;
-    }
+    if (!logsData) return alert("No logs to export.");
 
     const rows = Object.values(logsData);
     const header = 'Date,Start Time,End Time,Used Duration,Remaining Balance,Device Info\n';
-    const csvContent = rows.map(r => 
-        `"${r.d||''}","${r.s||''}","${r.e||''}","${r.u||''}","${r.r||''}","${r.device||''}"`
-    ).join('\n');
+    const csvContent = rows.map(r => `"${r.d||''}","${r.s||''}","${r.e||''}","${r.u||''}","${r.r||''}","${r.device||''}"`).join('\n');
 
     const blob = new Blob(['\ufeff' + header + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `BreakLogs_${activeLogAgent}_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
 
-// Weekly Reset (every Monday)
+// Weekly Reset
 function checkWeeklyReset() {
     const now = new Date();
-    if (now.getDay() === 1 && now.getHours() === 0) { // Monday at midnight
-        const agentsRef = ref(db, 'agents');
-        onValue(agentsRef, async (snapshot) => {
+    if (now.getDay() === 1 && now.getHours() === 0) {
+        onValue(ref(db, 'agents'), async (snapshot) => {
             const agents = snapshot.val() || {};
             for (const name in agents) {
-                await update(ref(db, `agents/${name}`), {
-                    logs: null,   // Clear logs
-                    used: 0,
-                    remain: DAY_TOTAL,
-                    count: 0
-                });
+                await update(ref(db, `agents/${name}`), { logs: null, used: 0, remain: DAY_TOTAL, count: 0 });
             }
         }, { onlyOnce: true });
     }
 }
 
-// ==================== Initialization ====================
-function initApp() {
-    const nameDisplay = document.getElementById('hello');
-    if (nameDisplay) nameDisplay.textContent = currentName;
+// Stub functions for remaining buttons (add more logic later if needed)
+function addAgent() { alert("Add Agent feature coming soon"); }
+function applyAdjustment() { alert("Time Adjustment feature coming soon"); }
+function resetUser(name) { 
+    if (name) alert(`Reset for ${name} coming soon`);
+}
 
-    renderAdminDashboard();
+// ==================== Init ====================
+function initApp() {
+    hideAll();
+    document.getElementById('portalSelect').classList.remove('hidden');
+
     updateClock();
     setInterval(updateClock, 1000);
 
     checkWeeklyReset();
-    setInterval(checkWeeklyReset, 3600000); // Check every hour
+    setInterval(checkWeeklyReset, 3600000);
 }
 
-// Make functions globally available for onclick handlers
+// Expose functions to window for HTML onclick
+window.showAgentLogin = showAgentLogin;
+window.showAdminLogin = showAdminLogin;
+window.goHome = goHome;
+window.authAgent = authAgent;
+window.authAdmin = authAdmin;
 window.startBreak = startBreak;
 window.endBreak = endBreak;
 window.viewAgentLogs = viewAgentLogs;
 window.closeModal = closeModal;
 window.exportCSV = exportCSV;
 window.renderAdminDashboard = renderAdminDashboard;
-window.checkWeeklyReset = checkWeeklyReset;
+window.addAgent = addAgent;
+window.applyAdjustment = applyAdjustment;
+window.resetUser = resetUser;
 
-// Start the app
 initApp();
