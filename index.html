@@ -3,160 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Break Tracker</title>
-    <link rel="stylesheet" href="styles.css">
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    <title>Break Tracker - Under Construction</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            background: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)),
+                        url('logo-background.jpg') center/cover no-repeat fixed;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .content {
+            max-width: 700px;
+            padding: 40px 20px;
+        }
+
+        .logo {
+            width: 220px;
+            height: 220px;
+            margin: 0 auto 30px;
+            background: url('logo-background.jpg') center/contain no-repeat;
+            filter: drop-shadow(0 0 30px rgba(100, 200, 255, 0.6));
+        }
+
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 20px;
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+        }
+
+        p {
+            font-size: 1.35rem;
+            line-height: 1.6;
+            opacity: 0.95;
+            margin-bottom: 30px;
+        }
+
+        .coffee {
+            font-size: 4rem;
+            margin: 20px 0;
+            animation: coffeeShake 2s infinite;
+        }
+
+        @keyframes coffeeShake {
+            0%, 100% { transform: rotate(-8deg); }
+            50% { transform: rotate(8deg); }
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 14px 32px;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-3px);
+        }
+    </style>
 </head>
 <body>
-<div class="wrap">
 
-    <!-- PORTAL SELECTION -->
-    <div id="portalSelect" class="card portal-select">
+    <div class="content">
+        <div class="logo"></div>
+        
         <h1>Break Tracker</h1>
-        <p class="muted">Please select your portal to continue</p>
-        <div class="row" style="justify-content: center; margin-top: 30px; gap: 20px;">
-            <button class="btn b" style="padding: 20px 40px; font-size: 1.2rem;" onclick="showAgentLogin()">Agent Portal</button>
-            <button class="btn s" style="padding: 20px 40px; font-size: 1.2rem;" onclick="showAdminLogin()">Admin Portal</button>
-        </div>
+        <p style="font-size: 1.5rem; margin-bottom: 10px;">Under Construction</p>
+        <p>This tracker is currently being rebuilt.<br>
+           I need more ☕ coffee to make it perfect.</p>
+        
+        <div class="coffee">☕☕☕</div>
+        
+        <a href="#" onclick="alert('Thanks for your patience! 🚀')" class="btn">
+            I'll be back soon
+        </a>
     </div>
 
-    <!-- AGENT LOGIN -->
-    <div id="agentLogin" class="card hidden">
-        <button class="btn s" onclick="goHome()" style="margin-bottom: 20px;">← Back</button>
-        <h2>Agent Access</h2>
-        <div class="row" style="flex-direction: column; gap: 15px; max-width: 300px; margin: auto; padding: 20px 0;">
-            <input id="loginAgentName" type="text" placeholder="Full Name">
-            <input id="loginAgentPin" type="password" placeholder="PIN/Password">
-            <button class="btn b" onclick="authAgent()">Enter Tracker</button>
-        </div>
-    </div>
-
-    <!-- ADMIN LOGIN -->
-    <div id="adminLogin" class="card hidden">
-        <button class="btn s" onclick="goHome()" style="margin-bottom: 20px;">← Back</button>
-        <h2>Admin Access</h2>
-        <div class="row" style="flex-direction: column; gap: 15px; max-width: 300px; margin: auto; padding: 20px 0;">
-            <input id="adminPasswordInput" type="password" placeholder="Admin Password">
-            <button class="btn y" onclick="authAdmin()">Login as Admin</button>
-        </div>
-    </div>
-
-    <!-- AGENT MAIN INTERFACE -->
-    <div id="mainCard" class="card hidden">
-        <div class="row header-actions">
-            <button class="btn-text" onclick="goHome()">Logout</button>
-            <div class="theme-btn" onclick="toggleTheme()" title="Toggle Light/Dark Mode">🌓</div>
-        </div>
-
-        <div class="agent-header">
-            <div id="clock" class="clock"></div>
-            <h2 id="hello" class="agent-name">Agent</h2>
-        </div>
-
-        <div class="timer-container">
-            <div id="status" class="status-indicator">Available</div>
-            <div class="timer" id="timer">00:00:00</div>
-            <div class="row" style="justify-content: center; gap: 20px;">
-                <button id="btnStart" class="btn g" onclick="startBreak()">Start Break</button>
-                <button id="btnEnd" class="btn r" onclick="endBreak()">End Break</button>
-            </div>
-        </div>
-
-        <div class="grid stats-grid">
-            <div>
-                <h2>Today Stats</h2>
-                <div id="used">Used: 00:00:00</div>
-                <div id="sessions">Sessions: 0</div>
-                <div id="health" class="good">Healthy Balance</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ADMIN DASHBOARD -->
-    <div id="admin" class="card hidden">
-        <div class="row" style="justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h2>Admin Dashboard</h2>
-            <div class="row" style="align-items: center;">
-                <div class="theme-btn" onclick="toggleTheme()" style="margin-right: 10px;" title="Toggle Light/Dark Mode">🌓</div>
-                <button class="btn s" onclick="goHome()">Logout</button>
-            </div>
-        </div>
-
-        <!-- Manage Agents -->
-        <div style="margin-bottom: 30px;">
-            <h3>Manage Agents</h3>
-            <div class="row" style="margin-bottom: 10px;">
-                <input id="newAgentName" type="text" placeholder="Full Name" style="flex:1">
-                <input id="newAgentPin" type="text" placeholder="PIN" style="width:100px">
-                <button class="btn b" onclick="addAgent()">Add Agent</button>
-            </div>
-            <table id="agentManagementTable">
-                <tr><th>Agent Name</th><th>PIN</th><th>Actions</th></tr>
-            </table>
-        </div>
-
-        <!-- Live Monitoring -->
-        <div style="margin-bottom: 30px;">
-            <h3>Live Monitoring</h3>
-            <div class="row" style="margin-bottom: 15px; gap: 10px;">
-                <input id="adminSearchInput" type="text" placeholder="Filter by agent name..." style="flex: 2; padding: 10px;" oninput="renderAdminDashboard()">
-            </div>
-            <table id="adminDashboardTable">
-                <thead>
-                    <tr>
-                        <th>Agent Name</th>
-                        <th>Remaining Time</th>
-                        <th>Used</th>
-                        <th>Sessions</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="adminDashboardBody"></tbody>
-            </table>
-        </div>
-
-        <!-- Manual Controls -->
-        <h3>Manual Controls</h3>
-        <div class="row" style="margin-bottom: 15px; flex-wrap: wrap; gap: 8px;">
-            <select id="adminAgentSelect" style="flex:1"></select>
-            <input id="adjVal" type="number" placeholder="Seconds (e.g. 300)" style="flex:1">
-            <input id="adjReason" type="text" placeholder="Reason" style="flex:1">
-            <button class="btn y" onclick="applyAdjustment()">Adjust Time</button>
-        </div>
-        <button class="btn r" onclick="resetUser(document.getElementById('adminAgentSelect').value)">Full Time Reset</button>
-    </div>
-
-    <!-- SESSION LOGS MODAL (Admin Only) -->
-    <div id="logModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="logModalTitle">Session Logs</h2>
-                <button onclick="closeModal()" class="close-btn">&times;</button>
-            </div>
-            
-            <div class="modal-body">
-                <div style="margin-bottom: 15px; text-align: right;">
-                    <button onclick="exportCSV()" class="btn-export">
-                        📥 Export CSV
-                    </button>
-                </div>
-                
-                <div class="table-container">
-                    <table id="logs"></table>
-                </div>
-            </div>
-            
-            <div class="modal-footer">
-                <button onclick="closeModal()" class="btn s">Close</button>
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<script type="module" src="app.js"></script>
+    <script>
+        // Optional: Auto-refresh every 30 seconds (remove if not needed)
+        // setTimeout(() => location.reload(), 30000);
+    </script>
 </body>
 </html>
