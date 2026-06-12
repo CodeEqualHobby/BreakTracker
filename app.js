@@ -42,6 +42,156 @@ let allAgentsCache = null;
 let adminUnsubscribe = null;
 let agentListener = null; // For real-time updates
 
+/* --- Utilities & Helpers --- */
+
+// Formats seconds into HH:MM:SS (taken from your offline version)
+const fmt = (s) => {
+    const isNeg = s < 0;
+    const absS = Math.abs(s);
+    const h = Math.floor(absS / 3600), m = Math.floor((absS % 3600) / 60), x = absS % 60;
+    const ts = [h, m, x].map(v => String(v).padStart(2, '0')).join(':');
+    return isNeg ? `- ${ts}` : ts;
+};
+
+// Global reference for the agent currently being viewed in the modal
+let activeLogAgent = '';
+
+/* --- Session Logging Logic --- */
+
+// Call this inside your existing endBreak function logic
+function endBreak() {
+    const name = currentName; // Adjust based on how you store the current user's name
+    const agentRef = firebase.database().ref(`agents/`);
+
+    agentRef.once('value').then(snapshot => {
+        const data = snapshot.val();
+        if (!data || !data.start) return;
+
+        const start = data.start;
+        const end = Date.now();
+        const elapsed = Math.floor((end - start) / 1000);
+        const newUsed = (data.used || 0) + elapsed;
+        const newRemain = (data.remain || 5400) - elapsed;
+        
+        // Capture device info
+        const device = navigator.userAgent.match(/\(([^)]+)\)/) ? navigator.userAgent.match(/\(([^)]+)\)/)[1].split(';')[0] : "Unknown";
+
+        const logEntry = {
+            d: new Date().toLocaleDateString(),
+            s: new Date(start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            e: new Date(end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            u: fmt(elapsed),
+            r: fmt(newRemain),
+            device: device,
+            timestamp: end // for sorting
+        };
+
+        // 1. Push log to Firebase
+        firebase.database().ref(`agents//logs`).push(logEntry);
+
+        // 2. Update the agent's main state
+        agentRef.update({
+            start: 0,
+            used: newUsed,
+            remain: newRemain,
+            count: (data.count || 0) + 1,
+            lastSeen: firebase.database.ServerValue.TIMESTAMP
+        });
+        
+        // Local render if applicable
+        if(typeof render === 'function') render();
+    });
+}
+
+/* --- Admin Portal Functions --- */
+
+function viewAgentLogs(agentName) {
+    activeLogAgent = agentName;
+    const modal = document.getElementById('logModal');
+    const modalTitle = document.querySelector('#logModal h2');
+    
+    if (modalTitle) modalTitle.innerText = `Session Logs: `;
+    modal.style.display = 'block';
+    
+    drawLogs(agentName);
+}
+
+function drawLogs(agentName) {
+    const logTable = document.getElementById('logs'); // Ensure this ID matches your <table>
+    if (!logTable) return;
+
+    // Table Header
+    logTable.innerHTML = `
+        <tr>
+            <th>Date</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Used</th>
+            <th>Remaining</th>
+            <th>Device</th>
+        </tr>`;
+
+    firebase.database().ref(`agents//logs`).orderByChild('timestamp').once('value', (snapshot) => {
+        const logs = snapshot.val();
+        if (!logs) {
+            logTable.innerHTML += '<tr><td colspan="6" style="text-align:center;">No logs found for this agent.</td></tr>';
+            return;
+        }
+
+        // Convert to array and reverse to show newest first
+        const logEntries = Object.values(logs).reverse();
+
+        logEntries.forEach(log => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${log.d || '-'}</td>
+                <td>${log.s || '-'}</td>
+                <td>${log.e || '-'}</td>
+                <td>${log.u || '-'}</td>
+                <td>${log.r || '-'}</td>
+                <td><small class="muted">${log.device || '-'}</small></td>
+            `;
+            logTable.appendChild(tr);
+        });
+    });
+}
+
+/**
+ * Exports logs of the active agent to CSV
+ */
+function exportCSV() {
+    if (!activeLogAgent) return;
+
+    firebase.database().ref(`agents//logs`).once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+            alert("No logs to export!");
+            return;
+        }
+
+        const rows = Object.values(data);
+        const header = 'Date,Start,End,Used,Remaining,Device\n';
+        const csvContent = rows.map(r => 
+            `"${r.d||''}","${r.s||''}","${r.e||''}","${r.u||''}","${r.r||''}","${r.device||''}"`
+        ).join('\n');
+
+        // Create the download
+        const blob = new Blob(['\ufeff' + header + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        
+        const dateStr = new Date().toISOString().split('T')[0];
+        a.href = url;
+        a.download = `BreakTracker_Logs__.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+}
+
+
+
 const fmt = (s) => {
   const isNeg = s < 0;
   const absS = Math.abs(s);
