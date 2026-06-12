@@ -121,6 +121,24 @@
         <tbody id="adminDashboardBody"></tbody>
     </table>
 </div>
+<!-- Log Modal -->
+<div id="logModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Session Logs</h2>
+            <!-- Restore/Add the Export Button here -->
+            <button id="btnExport" class="btn btn-export" onclick="exportCSV()">
+                Download CSV
+            </button>
+        </div>
+        <div class="modal-body">
+            <table id="logs">
+                <!-- Data populated by drawLogs() -->
+            </table>
+        </div>
+    </div>
+</div>
 
 <h3>Manual Controls</h3>
 <div class='row' style='margin-bottom:15px'>
