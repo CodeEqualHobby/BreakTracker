@@ -1,3 +1,52 @@
+/* Modal Styling Improvements */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.btn-export {
+    background-color: #27ae60 !important;
+    color: white;
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-export:hover {
+    background-color: #2ecc71 !important;
+}
+
+/* Table styling for logs */
+#logs {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#logs th {
+    background-color: #333;
+    color: #aaa;
+    text-align: left;
+    padding: 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+#logs td {
+    padding: 10px;
+    border-bottom: 1px solid #333;
+    font-size: 14px;
+}
+
+.muted {
+    color: #777;
+    font-size: 11px;
+}
 :root {
   --bg: #0b1220;
   --text: #e5e7eb;
