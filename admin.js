@@ -131,7 +131,10 @@ const viewLogs = async (agentId, fullName) => {
                     <span class="text-[10px] font-bold uppercase ${log.action === 'start' ? 'text-blue-400' : 'text-purple-400'}">${log.action}</span>
                 </td>
                 <td class="px-8 py-4 font-mono text-xs">${formatTime(log.remainingTime)}</td>
-                <td class="px-8 py-4 text-[10px] text-slate-500 max-w-xs truncate" title="${log.deviceInfo} ${log.deviceToken ? ' | ' + log.deviceToken : ''}">${log.deviceInfo}${log.deviceToken ? ' • ' + log.deviceToken.slice(0,8) : ''}</td>
+                <td class="px-8 py-4 text-[10px] text-slate-500 max-w-xs">
+                    <div title="${log.deviceInfo || ''}">${log.deviceInfo || '—'}</div>
+                    <div class="text-[10px] text-slate-400 truncate" title="Device Token: ${log.deviceToken || ''}">Token: ${log.deviceToken ? log.deviceToken : '—'}</div>
+                </td>
             `;
             logsTableBody.appendChild(row);
         });

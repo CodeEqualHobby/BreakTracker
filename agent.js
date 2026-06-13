@@ -1,5 +1,5 @@
 import { db } from './firebase-config.js';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { formatTime, getManilaTime, isResetTime, getDeviceInfo, getDeviceToken } from './utils.js';
 
 // --- State & Elements ---
@@ -34,6 +34,21 @@ async function init() {
         startClockAndLogic();
         loadTodayStats();
     }
+
+    // Realtime sync: keep agentData updated when other devices change the agent doc
+    onSnapshot(agentRef, (docSnap) => {
+        if (!docSnap.exists()) return;
+        const newData = docSnap.data();
+        // merge server fields into local agentData but keep any local-only helpers
+        agentData = Object.assign({}, agentData || {}, newData);
+
+        // ensure breakStartedAt and breakRemainingAtStart are available on client
+        agentData.breakStartedAt = newData.breakStartedAt ?? agentData.breakStartedAt;
+        agentData.breakRemainingAtStart = newData.breakRemainingAtStart ?? agentData.breakRemainingAtStart;
+
+        updateUI();
+        loadTodayStats();
+    });
 }
 
 function updateUI() {
