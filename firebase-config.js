@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics.js";
 
 /**
  * Firestore Collection Schemas:
@@ -19,12 +20,13 @@ const firebaseConfig = {
   projectId: "breaktracker-57174",
   storageBucket: "breaktracker-57174.firebasestorage.app",
   messagingSenderId: "401629085687",
-  appId: "1:401629085687:web:c31a8d9c77d2743b45f8f2",
-  measurementId: "G-F3R349VLKQ"
+  appId: "1:401629085687:web:70e40df9140f80bf45f8f2",
+  measurementId: "G-1T118E5BCP"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const analytics = getAnalytics(app);
 
-export { db };
+export { db, analytics };
