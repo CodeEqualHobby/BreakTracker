@@ -19,6 +19,29 @@ export const getManilaTime = () => {
     }).format(new Date());
 };
 
+export const getManilaDate = () => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).formatToParts(new Date());
+
+    const values = {};
+    parts.forEach(part => {
+        if (part.type !== 'literal') values[part.type] = part.value;
+    });
+
+    const MANILA_OFFSET = 8; // Manila is UTC+8 year-round
+    return new Date(Date.UTC(
+        Number(values.year),
+        Number(values.month) - 1,
+        Number(values.day),
+        Number(values.hour) - MANILA_OFFSET,
+        Number(values.minute),
+        Number(values.second)
+    ));
+};
+
 export const isResetTime = () => {
     const now = new Date();
     const manilaString = new Intl.DateTimeFormat('en-PH', {
@@ -32,6 +55,19 @@ export const getDeviceInfo = () => {
     return navigator.userAgent;
 };
 
+export const getDeviceToken = () => {
+    const key = 'deviceToken';
+    try {
+        let t = localStorage.getItem(key);
+        if (!t) {
+            t = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'dt-' + Math.random().toString(36).slice(2, 10);
+            localStorage.setItem(key, t);
+        }
+        return t;
+    } catch (e) {
+        return 'dt-fallback';
+    }
+};
 /**
  * Generates and triggers a download for a CSV file.
  * @param {string[]} headers - Array of column headers

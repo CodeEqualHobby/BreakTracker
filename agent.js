@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { formatTime, getManilaTime, isResetTime, getDeviceInfo } from './utils.js';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { formatTime, getManilaTime, isResetTime, getDeviceInfo, getDeviceToken } from './utils.js';
 
 // --- State & Elements ---
 const sessionUser = JSON.parse(localStorage.getItem('user'));
@@ -14,6 +14,8 @@ const startBtn = document.getElementById('startBreakBtn');
 const endBtn = document.getElementById('endBreakBtn');
 const clockEl = document.getElementById('manilaClock');
 const overbreakFlash = document.getElementById('overbreakFlash');
+const breakCountEl = document.getElementById('breakCount');
+const totalBreakTimeEl = document.getElementById('totalBreakTime');
 
 let agentData = null;
 let timerInterval = null;
@@ -30,6 +32,7 @@ async function init() {
         document.getElementById('userFullName').innerText = agentData.fullName || 'Standard Agent';
         updateUI();
         startClockAndLogic();
+        loadTodayStats();
     }
 }
 
@@ -67,10 +70,22 @@ function startClockAndLogic() {
         }
 
         if (agentData.status === 'break') {
-            agentData.remainingBreakTime--;
+            const toMs = (ts) => {
+                if (!ts) return null;
+                if (ts.toDate) return ts.toDate().getTime();
+                if (ts instanceof Date) return ts.getTime();
+                if (typeof ts === 'number') return ts;
+                return new Date(ts).getTime();
+            };
+
+            const startMs = toMs(agentData.breakStartedAt) || agentData._localBreakStartMs || Date.now();
+            const remainingAtStart = Number(agentData.breakRemainingAtStart ?? agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
+            const elapsed = Math.floor((Date.now() - startMs) / 1000);
+            const newRemaining = remainingAtStart - elapsed;
+            agentData.remainingBreakTime = newRemaining;
             updateUI();
-            // Persist to Firestore every 10 seconds to save on writes but maintain "real-time"
-            if (agentData.remainingBreakTime % 10 === 0) syncFirestore();
+
+            if (elapsed > 0 && elapsed % 10 === 0) syncFirestore();
         }
     }, 1000);
 }
@@ -92,16 +107,81 @@ async function syncFirestore() {
     });
 }
 
-async function logBreakAction(action) {
-    await addDoc(collection(db, "breakLogs"), {
+async function logBreakAction(action, duration = null) {
+    const payload = {
         agentId: sessionUser.id,
         agentName: agentData.username,
         timestamp: serverTimestamp(),
         manilaTime: getManilaTime(),
-        action: action,
+        action,
         remainingTime: agentData.remainingBreakTime,
-        deviceInfo: getDeviceInfo()
+        deviceInfo: getDeviceInfo(),
+        deviceToken: getDeviceToken()
+    };
+
+    if (action === 'end') {
+        payload.duration = duration;
+    }
+
+    await addDoc(collection(db, "breakLogs"), payload);
+}
+
+const startBreakFirestore = async () => {
+    const agentRef = doc(db, "agents", sessionUser.id);
+    await updateDoc(agentRef, {
+        status: 'break',
+        breakStartedAt: serverTimestamp(),
+        breakRemainingAtStart: agentData.remainingBreakTime
     });
+    // local fallbacks
+    agentData.breakStartedAt = new Date();
+    agentData.breakRemainingAtStart = agentData.remainingBreakTime;
+};
+
+const endBreakFirestore = async () => {
+    const agentRef = doc(db, "agents", sessionUser.id);
+    await updateDoc(agentRef, {
+        status: 'available',
+        remainingBreakTime: agentData.remainingBreakTime,
+        breakStartedAt: null,
+        breakRemainingAtStart: null
+    });
+    agentData.breakStartedAt = null;
+    agentData.breakRemainingAtStart = null;
+};
+
+const formatMinutes = (seconds) => `${Math.floor(Math.max(0, seconds) / 60)}m`;
+
+const isSameManilaDay = (date, reference = new Date()) => {
+    return date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' }) === reference.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' });
+};
+
+const loadTodayStats = async () => {
+    try {
+        const q = query(collection(db, "breakLogs"), where("agentId", "==", sessionUser.id), orderBy("timestamp", "desc"));
+        const snap = await getDocs(q);
+        const today = new Date();
+        let breakCount = 0;
+        let totalSeconds = 0;
+
+        snap.forEach(docSnap => {
+            const log = docSnap.data();
+            const timestamp = log.timestamp && log.timestamp.toDate ? log.timestamp.toDate() : new Date(log.manilaTime || '');
+            if (!timestamp || !isSameManilaDay(timestamp, today)) return;
+
+            if (log.action === 'start') breakCount += 1;
+            if (log.action === 'end') totalSeconds += Number(log.duration || 0);
+        });
+
+        if (agentData?.status === 'break') {
+            totalSeconds += Math.max(0, DEFAULT_BREAK_SEC - agentData.remainingBreakTime);
+        }
+
+        breakCountEl.innerText = breakCount;
+        totalBreakTimeEl.innerText = formatMinutes(totalSeconds);
+    } catch (err) {
+        console.error('Failed to load daily stats:', err);
+    }
 }
 
 // --- Event Listeners ---
@@ -109,17 +189,33 @@ async function logBreakAction(action) {
 startBtn.addEventListener('click', async () => {
     startBtn.disabled = true;
     agentData.status = 'break';
+    // persist break start with server timestamp and initial remaining
+    await startBreakFirestore();
     await logBreakAction('start');
-    await syncFirestore();
     updateUI();
+    loadTodayStats();
 });
 
 endBtn.addEventListener('click', async () => {
     endBtn.disabled = true;
     agentData.status = 'available';
-    await logBreakAction('end');
-    await syncFirestore();
+    const toMs = (ts) => {
+        if (!ts) return Date.now();
+        if (ts.toDate) return ts.toDate().getTime();
+        if (ts instanceof Date) return ts.getTime();
+        if (typeof ts === 'number') return ts;
+        return new Date(ts).getTime();
+    };
+
+    const startMs = toMs(agentData.breakStartedAt) || Date.now();
+    const duration = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    const remainingAtStart = Number(agentData.breakRemainingAtStart ?? DEFAULT_BREAK_SEC);
+    agentData.remainingBreakTime = remainingAtStart - duration;
+
+    await logBreakAction('end', duration);
+    await endBreakFirestore();
     updateUI();
+    loadTodayStats();
 });
 
 document.getElementById('logoutBtn').addEventListener('click', () => {

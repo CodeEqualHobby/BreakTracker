@@ -2,7 +2,7 @@ import { db } from './firebase-config.js';
 import { 
     collection, onSnapshot, addDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp, writeBatch 
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-import { formatTime, getManilaTime, generateCSV } from './utils.js';
+import { formatTime, getManilaTime, getManilaDate, generateCSV } from './utils.js';
 
 // Check Auth
 const sessionUser = JSON.parse(localStorage.getItem('user'));
@@ -131,7 +131,7 @@ const viewLogs = async (agentId, fullName) => {
                     <span class="text-[10px] font-bold uppercase ${log.action === 'start' ? 'text-blue-400' : 'text-purple-400'}">${log.action}</span>
                 </td>
                 <td class="px-8 py-4 font-mono text-xs">${formatTime(log.remainingTime)}</td>
-                <td class="px-8 py-4 text-[10px] text-slate-500 max-w-xs truncate" title="${log.deviceInfo}">${log.deviceInfo}</td>
+                <td class="px-8 py-4 text-[10px] text-slate-500 max-w-xs truncate" title="${log.deviceInfo} ${log.deviceToken ? ' | ' + log.deviceToken : ''}">${log.deviceInfo}${log.deviceToken ? ' • ' + log.deviceToken.slice(0,8) : ''}</td>
             `;
             logsTableBody.appendChild(row);
         });
@@ -149,12 +149,13 @@ closeModalBtn.onclick = () => logsModal.classList.add('hidden');
 exportCsvBtn.onclick = () => {
     if (!currentLogs.length) return;
     
-    const headers = ["Timestamp", "Action", "Remaining Time", "Device Info"];
+    const headers = ["Timestamp", "Action", "Remaining Time", "Device Info", "Device Token"];
     const rows = currentLogs.map(l => [
         l.manilaTime,
         l.action,
         formatTime(l.remainingTime),
-        l.deviceInfo
+        l.deviceInfo,
+        l.deviceToken || ''
     ]);
 
     // Calculate Week Range for Filename
@@ -173,13 +174,15 @@ exportCsvBtn.onclick = () => {
 // --- Auto-Clean Logic ---
 
 async function autoCleanLogs() {
-    // Find the most recent Sunday at 12:00 PM MNL
-    const now = new Date();
-    const lastSunday = new Date();
-    lastSunday.setDate(now.getDate() - now.getDay());
-    lastSunday.setHours(12, 0, 0, 0);
+    // Find the most recent Sunday at 12:00 PM Manila time
+    const manilaNow = getManilaDate();
+    const lastSunday = new Date(Date.UTC(
+        manilaNow.getUTCFullYear(),
+        manilaNow.getUTCMonth(),
+        manilaNow.getUTCDate() - manilaNow.getUTCDay(),
+        12, 0, 0, 0
+    ));
 
-    // Only delete if logs are actually from before this week's start
     const q = query(collection(db, "breakLogs"), where("timestamp", "<", lastSunday));
     const snapshot = await getDocs(q);
     
