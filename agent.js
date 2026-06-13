@@ -21,6 +21,15 @@ let agentData = null;
 let timerInterval = null;
 const DEFAULT_BREAK_SEC = 5400; // 1h 30m
 
+const toMs = (ts) => {
+    if (!ts) return null;
+    if (ts.toDate) return ts.toDate().getTime();
+    if (ts instanceof Date) return ts.getTime();
+    if (typeof ts === 'number') return ts;
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? null : d.getTime();
+};
+
 // --- Initialization ---
 async function init() {
     const agentRef = doc(db, "agents", sessionUser.id);
@@ -30,6 +39,10 @@ async function init() {
         agentData = snap.data();
         document.getElementById('userNameDisplay').innerText = agentData.username;
         document.getElementById('userFullName').innerText = agentData.fullName || 'Standard Agent';
+        
+        if (agentData.status === 'break') {
+            agentData._localStartMs = toMs(agentData.breakStartedAt);
+        }
         updateUI();
         startClockAndLogic();
         loadTodayStats();
@@ -40,6 +53,11 @@ async function init() {
         if (!docSnap.exists()) return;
         const serverData = docSnap.data();
         
+        // If server says available, clear our local session anchor
+        if (serverData.status === 'available') {
+            agentData._localStartMs = null;
+        }
+
         // Only update status and other fields, but DON'T overwrite timing if we are mid-break
         // to prevent the "jump" caused by latency or stale 10s syncs.
         if (agentData.status !== 'break') {
@@ -48,8 +66,12 @@ async function init() {
         
         agentData.status = serverData.status;
         agentData.lastReset = serverData.lastReset;
-        agentData.breakStartedAt = serverData.breakStartedAt;
-        agentData.breakRemainingAtStart = serverData.breakRemainingAtStart;
+
+        // Only accept server timing if we don't have a local session active
+        if (!agentData._localStartMs) {
+            agentData.breakStartedAt = serverData.breakStartedAt;
+            agentData.breakRemainingAtStart = serverData.breakRemainingAtStart;
+        }
 
         updateUI();
         loadTodayStats();
@@ -78,6 +100,15 @@ function updateUI() {
         : 'bg-slate-700 text-slate-400 font-black py-5 rounded-2xl transition-all text-lg disabled:opacity-20 opacity-50 cursor-not-allowed';
 }
 
+function refreshBreakTimer() {
+    const startMs = agentData._localStartMs || toMs(agentData.breakStartedAt);
+    if (!startMs) return;
+
+    const remainingAtStart = Number(agentData.breakRemainingAtStart ?? agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
+    const elapsed = Math.floor((Date.now() - startMs) / 1000);
+    agentData.remainingBreakTime = remainingAtStart - elapsed;
+}
+
 function startClockAndLogic() {
     setInterval(() => {
         const now = new Date();
@@ -90,20 +121,7 @@ function startClockAndLogic() {
         }
 
         if (agentData.status === 'break') {
-            const toMs = (ts) => {
-                if (!ts) return null;
-                if (ts.toDate) return ts.toDate().getTime();
-                if (ts instanceof Date) return ts.getTime();
-                if (typeof ts === 'number') return ts;
-                return new Date(ts).getTime();
-            };
-
-            // Use local fallback if server timestamp hasn't arrived yet
-            const startMs = toMs(agentData.breakStartedAt) || agentData._localStartMs;
-            const remainingAtStart = Number(agentData.breakRemainingAtStart ?? agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
-            const elapsed = startMs ? Math.floor((Date.now() - startMs) / 1000) : 0;
-            
-            agentData.remainingBreakTime = remainingAtStart - elapsed;
+            refreshBreakTimer();
             updateUI();
         }
     }, 1000);
@@ -220,16 +238,11 @@ startBtn.addEventListener('click', async () => {
 endBtn.addEventListener('click', async () => {
     endBtn.disabled = true;
     agentData.status = 'available';
-    const toMs = (ts) => {
-        if (!ts) return Date.now();
-        if (ts.toDate) return ts.toDate().getTime();
-        if (ts instanceof Date) return ts.getTime();
-        if (typeof ts === 'number') return ts;
-        return new Date(ts).getTime();
-    };
 
-    const startMs = toMs(agentData.breakStartedAt) || Date.now();
+    const startMs = agentData._localStartMs || toMs(agentData.breakStartedAt) || Date.now();
     const duration = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    agentData._localStartMs = null; // Clear anchor
+
     const remainingAtStart = Number(agentData.breakRemainingAtStart ?? DEFAULT_BREAK_SEC);
     agentData.remainingBreakTime = remainingAtStart - duration;
 
