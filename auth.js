@@ -46,17 +46,38 @@ agentForm.addEventListener('submit', async (e) => {
     }
 });
 
-// Admin Login Logic (Hardcoded as per request)
-adminForm.addEventListener('submit', (e) => {
+// Admin Login Logic (Hardcoded)
+adminForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = document.getElementById('adminUsername').value.trim();
     const pin = document.getElementById('adminPin').value;
 
-    // Fixed Admin Credentials
-    if (username === 'admin' && pin === '1234') {
-        localStorage.setItem('user', JSON.stringify({ username: 'admin', role: 'admin' }));
-        window.location.href = 'admin.html';
-    } else {
-        showError("Invalid admin credentials.");
+    try {
+        // Query the 'agents' collection for a document with the matching username and role 'admin'
+        const q = query(collection(db, "agents"), 
+            where("username", "==", username), 
+            where("role", "==", "admin")
+        );
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+            showError("Admin account not found.");
+            return;
+        }
+
+        let found = false;
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            if (data.pin === pin) {
+                found = true;
+                localStorage.setItem('user', JSON.stringify({ ...data, id: doc.id, role: 'admin' }));
+                window.location.href = 'admin.html';
+            }
+        });
+
+        if (!found) showError("Invalid admin PIN.");
+    } catch (error) {
+        console.error("Admin Login Error:", error);
+        showError("Connection failed.");
     }
 });
