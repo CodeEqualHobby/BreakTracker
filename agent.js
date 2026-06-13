@@ -38,13 +38,18 @@ async function init() {
     // Realtime sync: keep agentData updated when other devices change the agent doc
     onSnapshot(agentRef, (docSnap) => {
         if (!docSnap.exists()) return;
-        const newData = docSnap.data();
-        // merge server fields into local agentData but keep any local-only helpers
-        agentData = Object.assign({}, agentData || {}, newData);
-
-        // ensure breakStartedAt and breakRemainingAtStart are available on client
-        agentData.breakStartedAt = newData.breakStartedAt ?? agentData.breakStartedAt;
-        agentData.breakRemainingAtStart = newData.breakRemainingAtStart ?? agentData.breakRemainingAtStart;
+        const serverData = docSnap.data();
+        
+        // Only update status and other fields, but DON'T overwrite timing if we are mid-break
+        // to prevent the "jump" caused by latency or stale 10s syncs.
+        if (agentData.status !== 'break') {
+            agentData.remainingBreakTime = serverData.remainingBreakTime;
+        }
+        
+        agentData.status = serverData.status;
+        agentData.lastReset = serverData.lastReset;
+        agentData.breakStartedAt = serverData.breakStartedAt;
+        agentData.breakRemainingAtStart = serverData.breakRemainingAtStart;
 
         updateUI();
         loadTodayStats();
@@ -93,14 +98,13 @@ function startClockAndLogic() {
                 return new Date(ts).getTime();
             };
 
-            const startMs = toMs(agentData.breakStartedAt) || agentData._localBreakStartMs || Date.now();
+            // Use local fallback if server timestamp hasn't arrived yet
+            const startMs = toMs(agentData.breakStartedAt) || agentData._localStartMs;
             const remainingAtStart = Number(agentData.breakRemainingAtStart ?? agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
-            const elapsed = Math.floor((Date.now() - startMs) / 1000);
-            const newRemaining = remainingAtStart - elapsed;
-            agentData.remainingBreakTime = newRemaining;
+            const elapsed = startMs ? Math.floor((Date.now() - startMs) / 1000) : 0;
+            
+            agentData.remainingBreakTime = remainingAtStart - elapsed;
             updateUI();
-
-            if (elapsed > 0 && elapsed % 10 === 0) syncFirestore();
         }
     }, 1000);
 }
@@ -148,9 +152,6 @@ const startBreakFirestore = async () => {
         breakStartedAt: serverTimestamp(),
         breakRemainingAtStart: agentData.remainingBreakTime
     });
-    // local fallbacks
-    agentData.breakStartedAt = new Date();
-    agentData.breakRemainingAtStart = agentData.remainingBreakTime;
 };
 
 const endBreakFirestore = async () => {
@@ -202,9 +203,14 @@ const loadTodayStats = async () => {
 // --- Event Listeners ---
 
 startBtn.addEventListener('click', async () => {
+    const now = Date.now();
     startBtn.disabled = true;
+    
+    // Set local state IMMEDIATELY for smooth UI
     agentData.status = 'break';
-    // persist break start with server timestamp and initial remaining
+    agentData._localStartMs = now;
+    agentData.breakRemainingAtStart = agentData.remainingBreakTime;
+
     await startBreakFirestore();
     await logBreakAction('start');
     updateUI();
