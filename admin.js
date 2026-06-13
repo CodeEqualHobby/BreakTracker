@@ -96,43 +96,52 @@ function listenToAgents() {
                     <div class="text-xs font-semibold text-slate-400">${lastActionText}</div>
                 </td>
                 <td class="px-8 py-5 text-right">
-                    <button onclick="window.viewLogs('${id}', '${agent.fullName}')" class="bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>
+                    <button type="button" class="view-logs-btn bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>
                 </td>
             `;
             tableBody.appendChild(row);
+            row.querySelector('.view-logs-btn')?.addEventListener('click', () => viewLogs(id, agent.fullName || 'N/A'));
         });
     });
 }
 
 // --- Logs & Modal Logic ---
 
-window.viewLogs = async (agentId, fullName) => {
+const viewLogs = async (agentId, fullName) => {
     currentViewedAgent = { id: agentId, name: fullName };
     modalAgentName.innerText = `Logs: ${fullName}`;
     logsTableBody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">Loading logs...</td></tr>';
     logsModal.classList.remove('hidden');
 
-    const q = query(collection(db, "breakLogs"), where("agentId", "==", agentId), orderBy("timestamp", "desc"));
-    const snap = await getDocs(q);
-    
-    logsTableBody.innerHTML = '';
-    currentLogs = [];
+    try {
+        const q = query(collection(db, "breakLogs"), where("agentId", "==", agentId), orderBy("timestamp", "desc"));
+        const snap = await getDocs(q);
+        
+        logsTableBody.innerHTML = '';
+        currentLogs = [];
 
-    snap.forEach(doc => {
-        const log = doc.data();
-        currentLogs.push(log);
-        const row = document.createElement('tr');
-        row.className = "border-b border-slate-700/20 hover:bg-slate-700/10";
-        row.innerHTML = `
-            <td class="px-8 py-4 text-xs text-slate-300">${log.manilaTime || '---'}</td>
-            <td class="px-8 py-4">
-                <span class="text-[10px] font-bold uppercase ${log.action === 'start' ? 'text-blue-400' : 'text-purple-400'}">${log.action}</span>
-            </td>
-            <td class="px-8 py-4 font-mono text-xs">${formatTime(log.remainingTime)}</td>
-            <td class="px-8 py-4 text-[10px] text-slate-500 max-w-xs truncate" title="${log.deviceInfo}">${log.deviceInfo}</td>
-        `;
-        logsTableBody.appendChild(row);
-    });
+        snap.forEach(doc => {
+            const log = doc.data();
+            currentLogs.push(log);
+            const row = document.createElement('tr');
+            row.className = "border-b border-slate-700/20 hover:bg-slate-700/10";
+            row.innerHTML = `
+                <td class="px-8 py-4 text-xs text-slate-300">${log.manilaTime || '---'}</td>
+                <td class="px-8 py-4">
+                    <span class="text-[10px] font-bold uppercase ${log.action === 'start' ? 'text-blue-400' : 'text-purple-400'}">${log.action}</span>
+                </td>
+                <td class="px-8 py-4 font-mono text-xs">${formatTime(log.remainingTime)}</td>
+                <td class="px-8 py-4 text-[10px] text-slate-500 max-w-xs truncate" title="${log.deviceInfo}">${log.deviceInfo}</td>
+            `;
+            logsTableBody.appendChild(row);
+        });
+    } catch (err) {
+        console.error('Failed to load logs:', err);
+        logsTableBody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-orange-400">Unable to load logs. Check console for details.</td></tr>';
+        currentLogs = [];
+    }
+
+    exportCsvBtn.disabled = currentLogs.length === 0;
 };
 
 closeModalBtn.onclick = () => logsModal.classList.add('hidden');
