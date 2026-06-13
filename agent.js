@@ -20,6 +20,7 @@ const totalBreakTimeEl = document.getElementById('totalBreakTime');
 let agentData = null;
 let timerInterval = null;
 const DEFAULT_BREAK_SEC = 5400; // 1h 30m
+const BREAK_STATE_KEY = `breakState-${sessionUser.id}`;
 
 const toMs = (ts) => {
     if (!ts) return null;
@@ -31,6 +32,35 @@ const toMs = (ts) => {
 };
 
 // --- Initialization ---
+function loadLocalBreakState() {
+    try {
+        const raw = localStorage.getItem(BREAK_STATE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved?.status !== 'break') return;
+
+        if (saved.breakStartMs != null) agentData._localStartMs = Number(saved.breakStartMs);
+        if (saved.breakEndMs != null) agentData.breakEndMs = Number(saved.breakEndMs);
+        if (saved.breakRemainingAtStart != null) agentData.breakRemainingAtStart = Number(saved.breakRemainingAtStart);
+    } catch (err) {
+        localStorage.removeItem(BREAK_STATE_KEY);
+    }
+}
+
+function saveLocalBreakState() {
+    const state = {
+        status: agentData.status,
+        breakStartMs: agentData._localStartMs ?? null,
+        breakEndMs: agentData.breakEndMs ?? null,
+        breakRemainingAtStart: agentData.breakRemainingAtStart ?? null
+    };
+    localStorage.setItem(BREAK_STATE_KEY, JSON.stringify(state));
+}
+
+function clearLocalBreakState() {
+    localStorage.removeItem(BREAK_STATE_KEY);
+}
+
 async function init() {
     const agentRef = doc(db, "agents", sessionUser.id);
     const snap = await getDoc(agentRef);
@@ -41,8 +71,23 @@ async function init() {
         document.getElementById('userFullName').innerText = agentData.fullName || 'Standard Agent';
         
         if (agentData.status === 'break') {
-            agentData._localStartMs = toMs(agentData.breakStartedAt);
+            loadLocalBreakState();
+
+            if (!agentData.breakEndMs && agentData.breakStartedAt && agentData.breakRemainingAtStart != null) {
+                const startMs = toMs(agentData.breakStartedAt);
+                if (startMs) {
+                    agentData.breakEndMs = startMs + Number(agentData.breakRemainingAtStart) * 1000;
+                }
+            }
+
+            if (agentData.breakEndMs) {
+                agentData._localStartMs = agentData._localStartMs || toMs(agentData.breakStartedAt);
+                refreshBreakTimer();
+            }
+        } else {
+            clearLocalBreakState();
         }
+
         updateUI();
         startClockAndLogic();
         loadTodayStats();
@@ -54,8 +99,11 @@ async function init() {
         const serverData = docSnap.data();
         
         // If server says available, clear our local session anchor
-        if (serverData.status === 'available') {
+            if (serverData.status === 'available') {
             agentData._localStartMs = null;
+            agentData.breakEndMs = null;
+            agentData.breakRemainingAtStart = null;
+            clearLocalBreakState();
         }
 
         // Only update status and other fields, but DON'T overwrite timing if we are mid-break
@@ -101,10 +149,19 @@ function updateUI() {
 }
 
 function refreshBreakTimer() {
+    if (agentData.breakEndMs != null) {
+        agentData.remainingBreakTime = Math.ceil((agentData.breakEndMs - Date.now()) / 1000);
+        return;
+    }
+
     const startMs = agentData._localStartMs || toMs(agentData.breakStartedAt);
     if (!startMs) return;
 
-    const remainingAtStart = Number(agentData.breakRemainingAtStart ?? agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
+    if (agentData.breakRemainingAtStart == null) {
+        agentData.breakRemainingAtStart = Number(agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
+    }
+
+    const remainingAtStart = Number(agentData.breakRemainingAtStart);
     const elapsed = Math.floor((Date.now() - startMs) / 1000);
     agentData.remainingBreakTime = remainingAtStart - elapsed;
 }
@@ -225,14 +282,24 @@ startBtn.addEventListener('click', async () => {
     startBtn.disabled = true;
     
     // Set local state IMMEDIATELY for smooth UI
+    const currentRemaining = Number(agentData.remainingBreakTime ?? DEFAULT_BREAK_SEC);
     agentData.status = 'break';
     agentData._localStartMs = now;
-    agentData.breakRemainingAtStart = agentData.remainingBreakTime;
+    agentData.breakRemainingAtStart = currentRemaining;
+    agentData.breakEndMs = now + currentRemaining * 1000;
+    agentData.remainingBreakTime = currentRemaining;
+    saveLocalBreakState();
 
-    await startBreakFirestore();
-    await logBreakAction('start');
+    refreshBreakTimer();
     updateUI();
     loadTodayStats();
+
+    try {
+        await startBreakFirestore();
+        await logBreakAction('start');
+    } catch (err) {
+        console.error('Failed to start break:', err);
+    }
 });
 
 endBtn.addEventListener('click', async () => {
@@ -241,10 +308,13 @@ endBtn.addEventListener('click', async () => {
 
     const startMs = agentData._localStartMs || toMs(agentData.breakStartedAt) || Date.now();
     const duration = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-    agentData._localStartMs = null; // Clear anchor
+    agentData._localStartMs = null;
+    agentData.breakEndMs = null;
 
     const remainingAtStart = Number(agentData.breakRemainingAtStart ?? DEFAULT_BREAK_SEC);
     agentData.remainingBreakTime = remainingAtStart - duration;
+    agentData.breakRemainingAtStart = null;
+    clearLocalBreakState();
 
     await logBreakAction('end', duration);
     await endBreakFirestore();
