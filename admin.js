@@ -77,6 +77,7 @@ function listenToAgents() {
             
             const isBreak = agent.status === 'break';
             const remaining = agent.remainingBreakTime || 0;
+            const lastActionText = agent.lastAction ? `${agent.lastAction.toUpperCase()} (${agent.lastActionTime || 'N/A'})` : 'No activity';
 
             row.innerHTML = `
                 <td class="px-8 py-5">
@@ -90,6 +91,9 @@ function listenToAgents() {
                 </td>
                 <td class="px-8 py-5 font-mono ${remaining < 0 ? 'text-red-400' : 'text-slate-300'}">
                     ${formatTime(remaining)}
+                </td>
+                <td class="px-8 py-5">
+                    <div class="text-xs font-semibold text-slate-400">${lastActionText}</div>
                 </td>
                 <td class="px-8 py-5 text-right">
                     <button onclick="window.viewLogs('${id}', '${agent.fullName}')" class="bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>
@@ -143,8 +147,16 @@ exportCsvBtn.onclick = () => {
         formatTime(l.remainingTime),
         l.deviceInfo
     ]);
-    const date = new Date().toISOString().split('T')[0];
-    const filename = `${currentViewedAgent.name.replace(/\s/g, '_')}_Logs_${date}.csv`;
+
+    // Calculate Week Range for Filename
+    const now = new Date();
+    const sun = new Date(now);
+    sun.setDate(now.getDate() - now.getDay());
+    const sat = new Date(sun);
+    sat.setDate(sun.getDate() + 6);
+    
+    const fDate = (d) => d.toISOString().split('T')[0];
+    const filename = `${currentViewedAgent.name.replace(/\s/g, '_')}_Weekof_${fDate(sun)}-${fDate(sat)}.csv`;
 
     generateCSV(headers, rows, filename);
 };
