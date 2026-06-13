@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Break Tracker - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0f172a',
+                        accent: '#22c55e',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-dark text-white min-h-screen flex items-center justify-center font-sans p-4">
+    <div class="max-w-md w-full">
+        <!-- Logo Area -->
+        <div class="text-center mb-10">
+            <div class="inline-block p-3 rounded-2xl bg-accent/10 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </div>
+            <h1 class="text-4xl font-bold text-white tracking-tight">Break <span class="text-accent">Tracker</span></h1>
+            <p class="text-slate-400 mt-2">Manage sessions and monitor productivity</p>
+        </div>
+
+        <!-- Tab Switcher -->
+        <div class="bg-slate-800/50 p-1.5 rounded-2xl flex mb-8 backdrop-blur-sm border border-slate-700/50">
+            <button id="agentTab" class="flex-1 py-3 text-sm font-bold rounded-xl transition-all bg-accent text-dark shadow-lg shadow-green-500/20" onclick="switchTab('agent')">Agent Login</button>
+            <button id="adminTab" class="flex-1 py-3 text-sm font-bold rounded-xl transition-all text-slate-400 hover:text-slate-200" onclick="switchTab('admin')">Admin Login</button>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-slate-800/80 backdrop-blur-md p-8 rounded-[2rem] shadow-2xl border border-slate-700">
+            <!-- Agent Form -->
+            <form id="agentForm" class="space-y-6">
+                <div class="space-y-2">
+                    <label class="text-xs uppercase tracking-widest font-bold text-slate-400 ml-1">Username</label>
+                    <input type="text" id="agentUsername" required class="w-full bg-slate-900/50 border border-slate-700 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all text-lg" placeholder="john_doe">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs uppercase tracking-widest font-bold text-slate-400 ml-1">4-Digit PIN</label>
+                    <input type="password" id="agentPin" required maxlength="4" inputmode="numeric" class="w-full bg-slate-900/50 border border-slate-700 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all text-center text-2xl tracking-[0.5em]" placeholder="••••">
+                </div>
+                <button type="submit" class="w-full bg-accent hover:bg-green-400 text-dark font-black py-5 rounded-2xl transition-all transform hover:scale-[1.01] active:scale-[0.98] text-lg shadow-lg shadow-green-500/20">
+                    Access Terminal
+                </button>
+            </form>
+
+            <!-- Admin Form (Hidden) -->
+            <form id="adminForm" class="space-y-6 hidden">
+                <div class="space-y-2">
+                    <label class="text-xs uppercase tracking-widest font-bold text-slate-400 ml-1">Admin Identity</label>
+                    <input type="text" id="adminUsername" required class="w-full bg-slate-900/50 border border-slate-700 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all text-lg" placeholder="admin_user">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs uppercase tracking-widest font-bold text-slate-400 ml-1">Master PIN</label>
+                    <input type="password" id="adminPin" required maxlength="4" inputmode="numeric" class="w-full bg-slate-900/50 border border-slate-700 rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all text-center text-2xl tracking-[0.5em]" placeholder="••••">
+                </div>
+                <button type="submit" class="w-full bg-white hover:bg-slate-100 text-dark font-black py-5 rounded-2xl transition-all transform hover:scale-[1.01] active:scale-[0.98] text-lg">
+                    Enter Admin Panel
+                </button>
+            </form>
+        </div>
+        
+        <div id="errorMsg" class="text-red-400 text-center mt-6 text-sm font-semibold min-h-[1.25rem] opacity-0 transition-opacity duration-300"></div>
+    </div>
+
+    <!-- Logic -->
+    <script src="assets/js/utils.js"></script>
+    <script type="module" src="assets/js/auth.js"></script>
+    <script>
+        function switchTab(type) {
+            const isAgent = type === 'agent';
+            document.getElementById('agentTab').className = isAgent ? 'flex-1 py-3 text-sm font-bold rounded-xl transition-all bg-accent text-dark shadow-lg shadow-green-500/20' : 'flex-1 py-3 text-sm font-bold rounded-xl transition-all text-slate-400 hover:text-slate-200';
+            document.getElementById('adminTab').className = !isAgent ? 'flex-1 py-3 text-sm font-bold rounded-xl transition-all bg-accent text-dark shadow-lg shadow-green-500/20' : 'flex-1 py-3 text-sm font-bold rounded-xl transition-all text-slate-400 hover:text-slate-200';
+            
+            document.getElementById('agentForm').classList.toggle('hidden', !isAgent);
+            document.getElementById('adminForm').classList.toggle('hidden', isAgent);
+            
+            const error = document.getElementById('errorMsg');
+            error.innerText = '';
+            error.style.opacity = '0';
+        }
+    </script>
+</body>
+</html>

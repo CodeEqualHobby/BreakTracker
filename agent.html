@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Agent Dashboard - Break Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <script>
+        tailwind.config = { theme: { extend: { colors: { dark: '#0f172a', accent: '#22c55e' } } } }
+    </script>
+</head>
+<body class="bg-dark text-white min-h-screen font-sans">
+    <nav class="border-b border-slate-800 p-4 md:p-6 flex flex-col md:flex-row justify-between items-center bg-slate-900/50 backdrop-blur-md sticky top-0 z-10 gap-4">
+        <div class="flex items-center gap-4">
+            <h1 class="text-2xl font-bold text-accent">Break Tracker</h1>
+            <div class="hidden md:block h-8 w-[1px] bg-slate-700"></div>
+            <div class="text-center md:text-left">
+                <div id="manilaClock" class="text-lg font-mono font-bold text-white leading-none">00:00:00</div>
+                <div class="text-[10px] uppercase tracking-tighter text-slate-500 font-bold">Manila (PHT)</div>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-4 w-full md:w-auto justify-between">
+            <div class="flex flex-col items-end">
+                <span id="userNameDisplay" class="text-white font-bold">Agent Name</span>
+                <span id="userFullName" class="text-xs text-slate-400">Loading profile...</span>
+            </div>
+            <button id="logoutBtn" class="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2 rounded-xl text-sm transition-all border border-red-500/20 font-bold">Logout</button>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto p-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Status Card -->
+            <div class="lg:col-span-2 bg-slate-800 p-8 rounded-[2rem] border border-slate-700 shadow-2xl relative overflow-hidden">
+                <div id="overbreakFlash" class="absolute inset-0 bg-red-600/5 pointer-events-none hidden animate-pulse"></div>
+                
+                <h2 class="text-slate-400 uppercase text-xs tracking-widest font-bold mb-4">Current Status</h2>
+                <div id="statusBadge" class="inline-flex items-center px-4 py-2 rounded-full bg-slate-900 text-slate-400 border border-slate-700 font-bold mb-8 transition-all">
+                    <span id="statusDot" class="w-2 h-2 rounded-full bg-slate-500 mr-2"></span>
+                    <span id="statusText">Checking...</span>
+                </div>
+
+                <div class="mb-2 text-slate-500 text-sm font-bold uppercase tracking-widest">Remaining Break Time</div>
+                <div class="text-7xl md:text-8xl font-mono font-black mb-10 tracking-tighter transition-colors" id="timer">01:30:00</div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <button id="startBreakBtn" class="bg-accent text-dark font-black py-5 rounded-2xl hover:bg-green-400 transition-all text-lg shadow-lg shadow-green-500/20 disabled:opacity-20 disabled:cursor-not-allowed">Start Break</button>
+                    <button id="endBreakBtn" class="bg-slate-700 text-slate-400 font-black py-5 rounded-2xl transition-all text-lg disabled:opacity-20 disabled:cursor-not-allowed" disabled>End Break</button>
+                </div>
+            </div>
+
+            <!-- Daily Stats -->
+            <div class="bg-slate-800/50 p-8 rounded-[2rem] border border-slate-700 backdrop-blur-sm">
+                <h2 class="text-slate-400 uppercase text-xs tracking-widest font-bold mb-6">Today's Summary</h2>
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Total Breaks</span>
+                        <span class="text-2xl font-bold" id="breakCount">0</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-400">Time on Break</span>
+                        <span class="text-2xl font-bold" id="totalBreakTime">0m</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="assets/js/utils.js"></script>
+    <script type="module" src="assets/js/agent.js"></script>
+</body>
+</html>

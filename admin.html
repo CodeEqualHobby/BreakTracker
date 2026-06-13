@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel - Break Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { dark: '#0f172a', accent: '#22c55e' } } } }
+    </script>
+</head>
+<body class="bg-dark text-white min-h-screen font-sans">
+    <nav class="border-b border-slate-800 p-6 flex justify-between items-center bg-slate-900/50 backdrop-blur-md">
+        <h1 class="text-2xl font-bold text-white">Admin <span class="text-accent">Console</span></h1>
+        <div class="flex items-center gap-4">
+            <div id="adminTime" class="text-sm font-mono text-slate-400"></div>
+            <button id="logoutBtn" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-sm transition-colors border border-slate-700">Logout</button>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto p-8">
+        <!-- Add Agent Section -->
+        <section class="mb-12 bg-slate-800/40 p-8 rounded-[2rem] border border-slate-700/50">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+                <span class="w-2 h-6 bg-accent rounded-full"></span>
+                Register New Agent
+            </h2>
+            <form id="addAgentForm" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase font-bold text-slate-500 ml-1">Full Name</label>
+                    <input type="text" id="newFullName" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:border-accent outline-none text-sm" placeholder="Juan Dela Cruz">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase font-bold text-slate-500 ml-1">Username</label>
+                    <input type="text" id="newUsername" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:border-accent outline-none text-sm" placeholder="juan_dc">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase font-bold text-slate-500 ml-1">4-Digit PIN</label>
+                    <input type="password" id="newPin" required maxlength="4" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:border-accent outline-none text-sm text-center tracking-widest" placeholder="••••">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full bg-accent hover:bg-green-400 text-dark font-bold py-3 rounded-xl transition-all">Add Agent</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Manage Agents Section -->
+        <div class="mb-6">
+            <h2 class="text-3xl font-bold">Real-time Monitoring</h2>
+            <p class="text-slate-400">Live status of all registered personnel</p>
+        </div>
+
+        <div class="bg-slate-800 rounded-[2rem] border border-slate-700 overflow-hidden shadow-2xl">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-900/50 text-slate-400 text-xs uppercase tracking-widest font-bold">
+                    <tr>
+                        <th class="px-8 py-5">Agent</th>
+                        <th class="px-8 py-5">Current Status</th>
+                        <th class="px-8 py-5">Daily Break Time</th>
+                        <th class="px-8 py-5 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="agentTableBody" class="divide-y divide-slate-700/50">
+                    <!-- Table rows injected by JS -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Logs Modal -->
+    <div id="logsModal" class="fixed inset-0 bg-dark/90 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-slate-800 w-full max-w-5xl max-h-[90vh] rounded-[2.5rem] border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-8 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                <div>
+                    <h3 id="modalAgentName" class="text-2xl font-bold text-white">Agent Logs</h3>
+                    <p class="text-slate-400 text-sm">Activity history for the current week</p>
+                </div>
+                <div class="flex gap-3">
+                    <button id="exportCsvBtn" class="bg-slate-700 hover:bg-slate-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        Export CSV
+                    </button>
+                    <button id="closeModalBtn" class="bg-slate-900 text-slate-400 hover:text-white p-2.5 rounded-xl border border-slate-700 transition-all">&times;</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto p-0">
+                <table class="w-full text-left border-collapse">
+                    <thead class="sticky top-0 bg-slate-900 text-slate-500 text-[10px] uppercase font-bold tracking-tighter">
+                        <tr>
+                            <th class="px-8 py-4">Timestamp (MNL)</th>
+                            <th class="px-8 py-4">Action</th>
+                            <th class="px-8 py-4">Remaining</th>
+                            <th class="px-8 py-4">Device Info</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody" class="divide-y divide-slate-700/30">
+                        <!-- Logs injected by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/utils.js"></script>
+    <script type="module" src="assets/js/admin.js"></script>
+</body>
+</html>
