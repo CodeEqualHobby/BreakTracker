@@ -1,6 +1,6 @@
 import { db } from './firebase-config.js';
 import { 
-    collection, onSnapshot, addDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp, writeBatch 
+    collection, onSnapshot, addDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp, writeBatch, updateDoc 
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { formatTime, getManilaTime, getManilaDate, generateCSV } from './utils.js';
 import { limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
@@ -88,6 +88,7 @@ if (!sessionUser || sessionUser.role !== 'admin') {
 
 // --- DOM Elements ---
 const tableBody = document.getElementById('agentTableBody');
+const adminTableBody = document.getElementById('adminTableBody');
 const addAgentForm = document.getElementById('addAgentForm');
 const logsModal = document.getElementById('logsModal');
 const logsTableBody = document.getElementById('logsTableBody');
@@ -194,6 +195,16 @@ addAgentForm.addEventListener('submit', async (e) => {
 function listenToAgents() {
     onSnapshot(collection(db, "agents"), (snapshot) => {
         tableBody.innerHTML = '';
+        adminTableBody.innerHTML = '';
+
+        const fmtActionTime = (t) => {
+            if (!t) return 'N/A';
+            try {
+                if (typeof t.toDate === 'function') return t.toDate().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
+            } catch (e) {}
+            return String(t);
+        };
+
         snapshot.forEach((docSnap) => {
             const agent = docSnap.data();
             const id = docSnap.id;
@@ -202,16 +213,14 @@ function listenToAgents() {
 
             const isBreak = agent.status === 'break';
             const remaining = agent.remainingBreakTime || 0;
-            const fmtActionTime = (t) => {
-                if (!t) return 'N/A';
-                try {
-                    if (typeof t.toDate === 'function') return t.toDate().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
-                } catch (e) {}
-                return String(t);
-            };
-
-            // render placeholder for last action; if agent doc lacks it, we'll fetch latest log
+            const leaveInfo = agent.currentLeave ? `<div class="mt-2 inline-flex items-center rounded-full bg-purple-500/10 text-purple-300 text-[10px] uppercase px-2 py-1 tracking-[0.2em]">${agent.leaveType || 'Leave'}</div>` : '';
             const lastActionText = agent.lastAction ? `${String(agent.lastAction).toUpperCase()} (${fmtActionTime(agent.lastActionTime)})` : 'Loading...';
+            const actionButtons = [];
+
+            actionButtons.push(`<button type="button" class="view-logs-btn bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>`);
+            if (agent.role !== 'admin') {
+                actionButtons.push(`<button type="button" class="leave-btn bg-amber-600 hover:bg-amber-500 text-xs font-bold px-4 py-2 rounded-lg transition-all">Set Leave</button>`);
+            }
 
             row.innerHTML = `
                 <td class="px-8 py-5">
@@ -219,9 +228,12 @@ function listenToAgents() {
                     <div class="text-xs text-slate-500">@${agent.username}</div>
                 </td>
                 <td class="px-8 py-5">
-                    <span class="px-3 py-1 rounded-full text-[10px] uppercase font-black ${isBreak ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}">
-                        ${agent.status}
-                    </span>
+                    <div class="inline-flex items-center gap-2">
+                        <span class="px-3 py-1 rounded-full text-[10px] uppercase font-black ${isBreak ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}">
+                            ${agent.status}
+                        </span>
+                    </div>
+                    ${leaveInfo}
                 </td>
                 <td class="px-8 py-5 font-mono ${remaining < 0 ? 'text-red-400' : 'text-slate-300'}">
                     ${formatTime(remaining)}
@@ -229,14 +241,17 @@ function listenToAgents() {
                 <td class="px-8 py-5 last-action-cell">
                     <div class="text-xs font-semibold text-slate-400">${lastActionText}</div>
                 </td>
-                <td class="px-8 py-5 text-right">
-                    <button type="button" class="view-logs-btn bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>
+                <td class="px-8 py-5 text-right space-y-2">
+                    ${actionButtons.join('')}
                 </td>
             `;
-            tableBody.appendChild(row);
-            row.querySelector('.view-logs-btn')?.addEventListener('click', () => viewLogs(id, agent.fullName || 'N/A'));
 
-            // If agent doc doesn't include lastAction, fetch latest log as fallback
+            const targetTable = agent.role === 'admin' ? adminTableBody : tableBody;
+            targetTable.appendChild(row);
+
+            row.querySelector('.view-logs-btn')?.addEventListener('click', () => viewLogs(id, agent.fullName || 'N/A'));
+            row.querySelector('.leave-btn')?.addEventListener('click', () => setAgentLeave(id, agent.fullName || 'N/A'));
+
             if (!agent.lastAction) {
                 (async () => {
                     try {
@@ -303,6 +318,52 @@ const viewLogs = async (agentId, fullName) => {
 };
 
 closeModalBtn.onclick = () => logsModal.classList.add('hidden');
+
+async function setAgentLeave(agentId, fullName) {
+    const leaveType = prompt('Enter leave type: Vacation Leave, Sick Leave, or Emergency Leave');
+    if (!leaveType) return;
+
+    const normalized = leaveType.trim().toLowerCase();
+    const validTypes = {
+        'vacation leave': 'Vacation Leave',
+        'sick leave': 'Sick Leave',
+        'emergency leave': 'Emergency Leave'
+    };
+    const selectedLeave = validTypes[normalized];
+    if (!selectedLeave) {
+        alert('Invalid leave type. Please enter Vacation Leave, Sick Leave, or Emergency Leave.');
+        return;
+    }
+
+    const confirmLeave = confirm(`Set ${fullName} to ${selectedLeave}?\n\nThis will be logged in the agent's activity history.`);
+    if (!confirmLeave) return;
+
+    try {
+        const agentRef = doc(db, 'agents', agentId);
+        await updateDoc(agentRef, {
+            currentLeave: true,
+            leaveType: selectedLeave,
+            leaveSetAt: serverTimestamp()
+        });
+
+        await addDoc(collection(db, 'breakLogs'), {
+            agentId,
+            agentName: fullName,
+            timestamp: serverTimestamp(),
+            manilaTime: getManilaTime(),
+            action: 'leave',
+            leaveType: selectedLeave,
+            remainingTime: null,
+            deviceInfo: 'admin-console',
+            deviceToken: 'admin-action'
+        });
+
+        alert(`${fullName} is now marked as ${selectedLeave}.`);
+    } catch (err) {
+        console.error('Failed to set leave:', err);
+        alert('Error setting leave. Check console for details.');
+    }
+}
 
 exportCsvBtn.onclick = () => {
     if (!currentLogs.length) return;
