@@ -121,6 +121,10 @@ async function init() {
             agentData.breakRemainingAtStart = serverData.breakRemainingAtStart;
         }
 
+        // Mirror last action fields so UI can display them without extra fetch
+        if (serverData.lastAction) agentData.lastAction = serverData.lastAction;
+        if (serverData.lastActionTime) agentData.lastActionTime = serverData.lastActionTime;
+
         updateUI();
         loadTodayStats();
     });
