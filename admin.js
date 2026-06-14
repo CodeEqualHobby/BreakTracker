@@ -177,14 +177,25 @@ exportCsvBtn.onclick = () => {
 // --- Auto-Clean Logic ---
 
 async function autoCleanLogs() {
-    // Find the most recent Sunday at 12:00 PM Manila time
-    const manilaNow = getManilaDate();
-    const lastSunday = new Date(Date.UTC(
-        manilaNow.getUTCFullYear(),
-        manilaNow.getUTCMonth(),
-        manilaNow.getUTCDate() - manilaNow.getUTCDay(),
-        12, 0, 0, 0
-    ));
+    // Compute the UTC timestamp that corresponds to the most recent Sunday at 12:00 PM Manila time.
+    const MANILA_OFFSET_HOURS = 8;
+    const nowUtcMs = Date.now();
+    const manilaMs = nowUtcMs + MANILA_OFFSET_HOURS * 3600 * 1000;
+    const manilaNow = new Date(manilaMs);
+    const manilaYear = manilaNow.getUTCFullYear();
+    const manilaMonth = manilaNow.getUTCMonth();
+    const manilaDate = manilaNow.getUTCDate();
+    const manilaDay = manilaNow.getUTCDay();
+
+    // Manila local: Sunday at 12:00 -> UTC hour = 12 - MANILA_OFFSET_HOURS
+    const lastSundayUtcMs = Date.UTC(
+        manilaYear,
+        manilaMonth,
+        manilaDate - manilaDay,
+        12 - MANILA_OFFSET_HOURS,
+        0, 0, 0
+    );
+    const lastSunday = new Date(lastSundayUtcMs);
 
     const q = query(collection(db, "breakLogs"), where("timestamp", "<", lastSunday));
     const snapshot = await getDocs(q);
