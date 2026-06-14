@@ -175,24 +175,11 @@ function startClockAndLogic() {
         const now = new Date();
         clockEl.innerText = getManilaTime().split(', ')[1];
 
-        // Auto-reset logic (4:00 PM Manila)
-        const todayStr = now.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' });
-        if (isResetTime() && agentData.lastReset !== todayStr) {
-            performReset(todayStr);
-        }
-
         if (agentData.status === 'break') {
             refreshBreakTimer();
             updateUI();
         }
     }, 1000);
-}
-
-async function performReset(dateStr) {
-    agentData.remainingBreakTime = DEFAULT_BREAK_SEC;
-    agentData.lastReset = dateStr;
-    await syncFirestore();
-    updateUI();
 }
 
 async function syncFirestore() {

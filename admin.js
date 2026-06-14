@@ -8,26 +8,52 @@ import { limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firest
 // Check Auth
 const sessionUser = JSON.parse(localStorage.getItem('user'));
 
-// --- Weekly reset helpers (migrated from previous localStorage snippet) ---
-// Calculates the most recent Sunday 12:00 PM Manila (04:00 UTC)
-function getMostRecentResetPoint() {
+// --- Improved Weekly Reset Helpers ---
+function getThisSundayResetPoint() {
     const now = new Date();
-    const reset = new Date(now.getTime());
-    // Manila is UTC+8. Sunday 12:00 PM Manila = Sunday 04:00 AM UTC.
-    reset.setUTCHours(4, 0, 0, 0);
-    const day = reset.getUTCDay(); // 0 is Sunday
-    reset.setUTCDate(reset.getUTCDate() - day);
-
-    // If 'now' is earlier than this week's Sunday 12PM Manila, the last reset was last week.
-    if (now.getTime() < reset.getTime()) {
-        reset.setUTCDate(reset.getUTCDate() - 7);
-    }
+    // Convert to Manila time
+    const manilaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    
+    // Create this week's Sunday at 12:00 PM Manila
+    const reset = new Date(manilaNow);
+    reset.setHours(12, 0, 0, 0);                    // 12:00 PM
+    reset.setDate(reset.getDate() - reset.getDay()); // Move to Sunday (0 = Sunday)
+    
     return reset.getTime();
 }
 
-function shouldResetLogs() {
-    const lastResetStored = parseInt(localStorage.getItem('lastWeeklyReset') || '0', 10);
-    return getMostRecentResetPoint() > lastResetStored;
+async function autoCleanLogs() {
+    try {
+        const resetPoint = getThisSundayResetPoint();
+        const lastResetStored = parseInt(localStorage.getItem('lastWeeklyReset') || '0', 10);
+
+        // Skip if we already did this week's reset
+        if (resetPoint <= lastResetStored) {
+            console.log("Weekly logs cleanup already done this week.");
+            return;
+        }
+
+        // Find logs older than this Sunday 12PM
+        const cutoff = new Date(resetPoint);
+        const q = query(
+            collection(db, "breakLogs"), 
+            where("timestamp", "<", cutoff)
+        );
+        
+        const snapshot = await getDocs(q);
+
+        if (snapshot.empty) {
+            console.log("No old logs to clean this week.");
+            localStorage.setItem('lastWeeklyReset', String(resetPoint));
+            return;
+        }
+
+        console.log(`Found ${snapshot.size} old logs to archive...`);
+        await performWeeklyResetArchive(resetPoint);
+
+    } catch (err) {
+        console.error("Weekly cleanup failed:", err);
+    }
 }
 
 async function performWeeklyResetArchive(mostRecent) {
@@ -50,8 +76,10 @@ async function performWeeklyResetArchive(mostRecent) {
             batch.delete(d.ref);
         });
         await batch.commit();
+        console.log(`Archived ${snapshot.size} old logs`);
     }
 
+    // Mark reset in localStorage
     localStorage.setItem('lastWeeklyReset', String(mostRecent));
 }
 if (!sessionUser || sessionUser.role !== 'admin') {
@@ -66,6 +94,7 @@ const logsTableBody = document.getElementById('logsTableBody');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 const modalAgentName = document.getElementById('modalAgentName');
+const resetTimersBtn = document.getElementById('resetTimersBtn');
 
 let currentViewedAgent = null;
 let currentLogs = [];
@@ -75,6 +104,11 @@ const init = () => {
     startAdminClock();
     autoCleanLogs();
     listenToAgents();
+    
+    // Periodically check for pending resets (every 5 minutes to catch missed windows)
+    setInterval(() => {
+        autoCleanLogs();
+    }, 5 * 60 * 1000); // 5 minutes
 };
 
 const startAdminClock = () => {
@@ -86,6 +120,49 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
     localStorage.removeItem('user');
     window.location.href = 'index.html';
 });
+
+// --- Manual Timer Reset ---
+async function resetAllAgentTimers() {
+    if (!confirm('⚠️ Are you sure you want to reset ALL agent timers to 1h 30m?\n\nThis action cannot be undone and will affect all agents.')) {
+        return;
+    }
+
+    if (!confirm('⚠️ CONFIRM: Click OK to reset all agent timers NOW.')) {
+        return;
+    }
+
+    try {
+        resetTimersBtn.disabled = true;
+        resetTimersBtn.innerText = 'Resetting...';
+        
+        const agentsSnap = await getDocs(collection(db, 'agents'));
+        const batch = writeBatch(db);
+        const DEFAULT_TIME = 5400; // 1h 30m
+
+        agentsSnap.forEach(agentDoc => {
+            const agentRef = doc(db, 'agents', agentDoc.id);
+            batch.update(agentRef, {
+                remainingBreakTime: DEFAULT_TIME,
+                totalBreakTime: DEFAULT_TIME,
+                lastReset: new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })
+            });
+        });
+
+        await batch.commit();
+        console.log(`✓ Reset timers for ${agentsSnap.size} agents to 1h 30m`);
+        alert(`✓ Successfully reset timers for ${agentsSnap.size} agents`);
+        
+        resetTimersBtn.innerText = 'Reset Timers';
+        resetTimersBtn.disabled = false;
+    } catch (err) {
+        console.error('Error resetting timers:', err);
+        alert('❌ Error resetting timers. Check console for details.');
+        resetTimersBtn.innerText = 'Reset Timers';
+        resetTimersBtn.disabled = false;
+    }
+}
+
+resetTimersBtn.addEventListener('click', resetAllAgentTimers);
 
 // --- Agent Management ---
 
@@ -251,54 +328,5 @@ exportCsvBtn.onclick = () => {
 
     generateCSV(headers, rows, filename);
 };
-
-// --- Auto-Clean Logic ---
-
-async function autoCleanLogs() {
-    // Compute the UTC timestamp that corresponds to the most recent Sunday at 12:00 PM Manila time.
-    const MANILA_OFFSET_HOURS = 8;
-    const nowUtcMs = Date.now();
-    const manilaMs = nowUtcMs + MANILA_OFFSET_HOURS * 3600 * 1000;
-    const manilaNow = new Date(manilaMs);
-    const manilaYear = manilaNow.getUTCFullYear();
-    const manilaMonth = manilaNow.getUTCMonth();
-    const manilaDate = manilaNow.getUTCDate();
-    const manilaDay = manilaNow.getUTCDay();
-
-    // Manila local: Sunday at 12:00 -> UTC hour = 12 - MANILA_OFFSET_HOURS
-    const lastSundayUtcMs = Date.UTC(
-        manilaYear,
-        manilaMonth,
-        manilaDate - manilaDay,
-        12 - MANILA_OFFSET_HOURS,
-        0, 0, 0
-    );
-    // If the computed Manila Sunday noon maps to a UTC moment in the future
-    // (e.g., today is Sunday before 12:00 PM Manila), move the cutoff back one week
-    let adjustedLastSundayUtcMs = lastSundayUtcMs;
-    if (adjustedLastSundayUtcMs > nowUtcMs) {
-        adjustedLastSundayUtcMs -= 7 * 24 * 3600 * 1000;
-    }
-    const lastSunday = new Date(adjustedLastSundayUtcMs);
-
-    const q = query(collection(db, "breakLogs"), where("timestamp", "<", lastSunday));
-    const snapshot = await getDocs(q);
-
-    // Only perform cleanup once per computed reset point
-    const mostRecentResetPoint = getMostRecentResetPoint();
-    const lastResetStored = parseInt(localStorage.getItem('lastWeeklyReset') || '0', 10);
-    if (!(mostRecentResetPoint > lastResetStored)) {
-        return;
-    }
-
-    if (snapshot.empty) {
-        // mark reset point so we don't try again this week
-        localStorage.setItem('lastWeeklyReset', String(mostRecentResetPoint));
-        return;
-    }
-
-    // Archive and delete
-    await performWeeklyResetArchive(mostRecentResetPoint);
-}
 
 init();
