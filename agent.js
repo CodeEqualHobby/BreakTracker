@@ -225,7 +225,9 @@ const startBreakFirestore = async () => {
     await updateDoc(agentRef, {
         status: 'break',
         breakStartedAt: serverTimestamp(),
-        breakRemainingAtStart: agentData.remainingBreakTime
+        breakRemainingAtStart: agentData.remainingBreakTime,
+        lastAction: 'start',
+        lastActionTime: getManilaTime()
     });
 };
 
@@ -235,7 +237,9 @@ const endBreakFirestore = async () => {
         status: 'available',
         remainingBreakTime: agentData.remainingBreakTime,
         breakStartedAt: null,
-        breakRemainingAtStart: null
+        breakRemainingAtStart: null,
+        lastAction: 'end',
+        lastActionTime: getManilaTime()
     });
     agentData.breakStartedAt = null;
     agentData.breakRemainingAtStart = null;
