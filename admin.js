@@ -213,10 +213,23 @@ function listenToAgents() {
 
             const isBreak = agent.status === 'break';
             const remaining = agent.remainingBreakTime || 0;
-            const leaveInfo = agent.currentLeave ? `<div class="mt-2 inline-flex items-center rounded-full bg-purple-500/10 text-purple-300 text-[10px] uppercase px-2 py-1 tracking-[0.2em]">${agent.leaveType || 'Leave'}</div>` : '';
             const lastActionText = agent.lastAction ? `${String(agent.lastAction).toUpperCase()} (${fmtActionTime(agent.lastActionTime)})` : 'Loading...';
             const actionButtons = [];
+            let leaveInfo = '';
 
+if (agent.currentLeave === true && agent.leaveType) {
+    leaveInfo = `
+        <div class="mt-2 inline-flex items-center rounded-full bg-purple-500/10 text-purple-300 text-[10px] uppercase px-2 py-1 tracking-[0.2em]">
+            ${agent.leaveType}
+        </div>
+    `;
+} else if (agent.currentLeave === false) {
+    leaveInfo = `
+        <div class="mt-2 inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] uppercase px-2 py-1 tracking-[0.2em]">
+            Available
+        </div>
+    `;
+}
             actionButtons.push(`<button type="button" class="view-logs-btn bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>`);
             if (agent.role !== 'admin') {
                 actionButtons.push(`<button type="button" class="leave-btn bg-amber-600 hover:bg-amber-500 text-xs font-bold px-4 py-2 rounded-lg transition-all">Set Leave</button>`);
@@ -320,48 +333,81 @@ const viewLogs = async (agentId, fullName) => {
 closeModalBtn.onclick = () => logsModal.classList.add('hidden');
 
 async function setAgentLeave(agentId, fullName) {
-    const leaveType = prompt('Enter leave type: Vacation Leave, Sick Leave, or Emergency Leave');
-    if (!leaveType) return;
+    const input = prompt(
+        'Enter leave type or status:\n\n' +
+        '• Vacation Leave\n' +
+        '• Sick Leave\n' +
+        '• Emergency Leave\n' +
+        '• Available (to end current leave)'
+    );
 
-    const normalized = leaveType.trim().toLowerCase();
-    const validTypes = {
-        'vacation leave': 'Vacation Leave',
-        'sick leave': 'Sick Leave',
-        'emergency leave': 'Emergency Leave'
-    };
-    const selectedLeave = validTypes[normalized];
-    if (!selectedLeave) {
-        alert('Invalid leave type. Please enter Vacation Leave, Sick Leave, or Emergency Leave.');
-        return;
-    }
+    if (!input) return;
 
-    const confirmLeave = confirm(`Set ${fullName} to ${selectedLeave}?\n\nThis will be logged in the agent's activity history.`);
-    if (!confirmLeave) return;
+    const normalized = input.trim().toLowerCase();
+    let updateData = {};
+    let logAction = '';
+    let statusMessage = '';
 
-    try {
-        const agentRef = doc(db, 'agents', agentId);
-        await updateDoc(agentRef, {
+    if (normalized === 'available') {
+        // END LEAVE - Revert to normal
+        updateData = {
+            currentLeave: false,
+            leaveType: null,
+            leaveSetAt: null
+        };
+        logAction = 'return_from_leave';
+        statusMessage = 'Available';
+
+        if (!confirm(`Mark ${fullName} as Available and end their leave?`)) return;
+
+    } else {
+        // SET NEW LEAVE
+        const validTypes = {
+            'vacation leave': 'Vacation Leave',
+            'sick leave': 'Sick Leave',
+            'emergency leave': 'Emergency Leave'
+        };
+
+        const selectedLeave = validTypes[normalized];
+
+        if (!selectedLeave) {
+            alert('Invalid input.\nPlease type:\nVacation Leave, Sick Leave, Emergency Leave, or Available');
+            return;
+        }
+
+        updateData = {
             currentLeave: true,
             leaveType: selectedLeave,
             leaveSetAt: serverTimestamp()
-        });
+        };
+        logAction = 'leave';
+        statusMessage = selectedLeave;
+
+        if (!confirm(`Set ${fullName} to ${selectedLeave}?`)) return;
+    }
+
+    try {
+        const agentRef = doc(db, 'agents', agentId);
+        
+        await updateDoc(agentRef, updateData);
 
         await addDoc(collection(db, 'breakLogs'), {
             agentId,
             agentName: fullName,
             timestamp: serverTimestamp(),
             manilaTime: getManilaTime(),
-            action: 'leave',
-            leaveType: selectedLeave,
+            action: logAction,
+            leaveType: updateData.leaveType || 'Returned to Available',
             remainingTime: null,
             deviceInfo: 'admin-console',
             deviceToken: 'admin-action'
         });
 
-        alert(`${fullName} is now marked as ${selectedLeave}.`);
+        alert(`✅ ${fullName} is now marked as ${statusMessage}.`);
+        
     } catch (err) {
-        console.error('Failed to set leave:', err);
-        alert('Error setting leave. Check console for details.');
+        console.error('Failed to update leave status:', err);
+        alert('❌ Error updating leave status. Check console for details.');
     }
 }
 
