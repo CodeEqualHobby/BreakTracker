@@ -96,6 +96,7 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 const modalAgentName = document.getElementById('modalAgentName');
 const resetTimersBtn = document.getElementById('resetTimersBtn');
+const lastTimerResetInfo = document.getElementById('lastTimerResetInfo');
 
 let currentViewedAgent = null;
 let currentLogs = [];
@@ -105,10 +106,12 @@ const init = () => {
     startAdminClock();
     autoCleanLogs();
     listenToAgents();
+    loadLastAdminTimerReset();
     
     // Periodically check for pending resets (every 5 minutes to catch missed windows)
     setInterval(() => {
         autoCleanLogs();
+        loadLastAdminTimerReset();
     }, 5 * 60 * 1000); // 5 minutes
 };
 
@@ -123,12 +126,55 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 });
 
 // --- Manual Timer Reset ---
-async function resetAllAgentTimers() {
-    if (!confirm('⚠️ Are you sure you want to reset ALL agent timers to 1h 30m?\n\nThis action cannot be undone and will affect all agents.')) {
+async function getLastAdminTimerReset() {
+    try {
+        const q = query(
+            collection(db, 'breakLogs'),
+            where('action', '==', 'admin_timer_reset'),
+            orderBy('timestamp', 'desc')
+        );
+        const snap = await getDocs(q);
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+    } catch (err) {
+        console.error('Failed to fetch last timer reset:', err);
+        return null;
+    }
+}
+
+function isSameManilaDay(dateA, dateB = new Date()) {
+    const a = new Date(dateA.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+    const b = new Date(dateB.toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function displayLastTimerReset(resetLog) {
+    if (!resetLog) {
+        lastTimerResetInfo.innerText = 'No admin timer reset recorded yet.';
         return;
     }
 
-    if (!confirm('⚠️ CONFIRM: Click OK to reset all agent timers NOW.')) {
+    const adminName = resetLog.adminName || 'Unknown Admin';
+    const timeString = resetLog.manilaTime || getManilaTime();
+    lastTimerResetInfo.innerText = `Last reset by ${adminName} at ${timeString}`;
+}
+
+async function loadLastAdminTimerReset() {
+    const latestReset = await getLastAdminTimerReset();
+    displayLastTimerReset(latestReset);
+}
+
+async function resetAllAgentTimers() {
+    const latestReset = await getLastAdminTimerReset();
+    if (latestReset) {
+        const lastResetDate = latestReset.timestamp && latestReset.timestamp.toDate ? latestReset.timestamp.toDate() : new Date(latestReset.manilaTime);
+        if (lastResetDate && isSameManilaDay(lastResetDate)) {
+            const confirmed = confirm(`WARNING:\nAdmin ${latestReset.adminName || 'Unknown Admin'} already reset timers today at ${latestReset.manilaTime || ''}.\n\nDo you still want to reset all timers again?`);
+            if (!confirmed) return;
+        }
+    }
+
+    if (!confirm('⚠️ Are you sure you want to reset ALL agent timers to 1h 30m?\n\nThis action cannot be undone and will affect all agents.')) {
         return;
     }
 
@@ -139,31 +185,94 @@ async function resetAllAgentTimers() {
         const agentsSnap = await getDocs(collection(db, 'agents'));
         const batch = writeBatch(db);
         const DEFAULT_TIME = 5400; // 1h 30m
+        const resetBy = sessionUser?.fullName || sessionUser?.username || 'Admin';
+        const resetAt = getManilaTime();
 
         agentsSnap.forEach(agentDoc => {
             const agentRef = doc(db, 'agents', agentDoc.id);
             batch.update(agentRef, {
                 remainingBreakTime: DEFAULT_TIME,
                 totalBreakTime: DEFAULT_TIME,
-                lastReset: new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' })
+                lastReset: new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' }),
+                lastResetBy: resetBy,
+                lastResetAt: resetAt
             });
         });
 
         await batch.commit();
+        await addDoc(collection(db, 'breakLogs'), {
+            action: 'admin_timer_reset',
+            adminId: sessionUser?.id || null,
+            adminName: resetBy,
+            manilaTime: resetAt,
+            timestamp: serverTimestamp(),
+            details: `Reset ${agentsSnap.size} agent timers to 1h 30m`,
+            affectedAgentCount: agentsSnap.size,
+            deviceInfo: 'admin-console',
+            deviceToken: 'admin-action'
+        });
+
         console.log(`✓ Reset timers for ${agentsSnap.size} agents to 1h 30m`);
         alert(`✓ Successfully reset timers for ${agentsSnap.size} agents`);
-        
-        resetTimersBtn.innerText = 'Reset Timers';
-        resetTimersBtn.disabled = false;
+        await loadLastAdminTimerReset();
     } catch (err) {
         console.error('Error resetting timers:', err);
         alert('❌ Error resetting timers. Check console for details.');
+    } finally {
         resetTimersBtn.innerText = 'Reset Timers';
         resetTimersBtn.disabled = false;
     }
 }
 
 resetTimersBtn.addEventListener('click', resetAllAgentTimers);
+
+//test snippet for manual adjustment of remaining time by admin, called by "Adjust Time" button in admin.html
+
+// Called by Admin "Adjust Time" button
+async function applyAdjustment(agentId, currentRemaining, fullName) {
+    const input = prompt(`Adjust time for ${fullName} (in minutes).\nUse positive numbers to add, negative to subtract:`, "0");
+    if (input === null) return;
+
+    const minutes = parseInt(input);
+    if (isNaN(minutes) || minutes === 0) {
+        alert("Please enter a valid number of minutes.");
+        return;
+    }
+
+    const reason = prompt("Reason for adjustment:");
+    if (!reason) {
+        alert("Adjustment cancelled. A reason is required.");
+        return;
+    }
+
+    const adjustmentSeconds = minutes * 60;
+    const newRemaining = currentRemaining + adjustmentSeconds;
+
+    try {
+        const agentRef = doc(db, 'agents', agentId);
+        await updateDoc(agentRef, {
+            remainingBreakTime: newRemaining
+        });
+
+        await addDoc(collection(db, 'breakLogs'), {
+            agentId,
+            agentName: fullName,
+            timestamp: serverTimestamp(),
+            manilaTime: getManilaTime(),
+            action: 'adjustment',
+            remainingTime: newRemaining,
+            deviceInfo: `Admin Adjustment: ${minutes}m (${reason})`,
+            deviceToken: 'admin-action',
+            adminId: sessionUser?.id || null,
+            adminName: sessionUser?.fullName || sessionUser?.username || 'Admin'
+        });
+
+        alert(`✅ Successfully adjusted ${fullName}'s time by ${minutes} minutes.`);
+    } catch (err) {
+        console.error('Adjustment failed:', err);
+        alert("Failed to apply adjustment.");
+    }
+}
 
 // --- Agent Management ---
 
@@ -233,6 +342,7 @@ if (agent.currentLeave === true && agent.leaveType) {
             actionButtons.push(`<button type="button" class="view-logs-btn bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>`);
             if (agent.role !== 'admin') {
                 actionButtons.push(`<button type="button" class="leave-btn bg-amber-600 hover:bg-amber-500 text-xs font-bold px-4 py-2 rounded-lg transition-all">Set Leave</button>`);
+                actionButtons.push(`<button type="button" class="adj-btn bg-blue-600 hover:bg-blue-500 text-xs font-bold px-4 py-2 rounded-lg transition-all">Adjust Time</button>`);
             }
 
             row.innerHTML = `
@@ -264,6 +374,7 @@ if (agent.currentLeave === true && agent.leaveType) {
 
             row.querySelector('.view-logs-btn')?.addEventListener('click', () => viewLogs(id, agent.fullName || 'N/A'));
             row.querySelector('.leave-btn')?.addEventListener('click', () => setAgentLeave(id, agent.fullName || 'N/A'));
+            row.querySelector('.adj-btn')?.addEventListener('click', () => applyAdjustment(id, remaining, agent.fullName || 'N/A'));
 
             if (!agent.lastAction) {
                 (async () => {
