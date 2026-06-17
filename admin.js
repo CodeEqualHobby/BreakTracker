@@ -97,7 +97,25 @@ const exportCsvBtn = document.getElementById('exportCsvBtn');
 const modalAgentName = document.getElementById('modalAgentName');
 const resetTimersBtn = document.getElementById('resetTimersBtn');
 const lastTimerResetInfo = document.getElementById('lastTimerResetInfo');
+const openLeaveModalBtn = document.getElementById('openLeaveModalBtn');
+const openAdjustModalBtn = document.getElementById('openAdjustModalBtn');
 
+// Leave modal elements
+const leaveModal = document.getElementById('leaveModal');
+const leaveAgentSelect = document.getElementById('leaveAgentSelect');
+const leaveTypeSelect = document.getElementById('leaveTypeSelect');
+const submitLeaveChangeBtn = document.getElementById('submitLeaveChangeBtn');
+const leaveModalCloseBtn = document.getElementById('leaveModalCloseBtn');
+
+// Adjust modal elements
+const adjustModal = document.getElementById('adjustModal');
+const adjustAgentSelect = document.getElementById('adjustAgentSelect');
+const adjustMinutesInput = document.getElementById('adjustMinutesInput');
+const adjustReasonInput = document.getElementById('adjustReasonInput');
+const submitAdjustBtn = document.getElementById('submitAdjustBtn');
+const adjustModalCloseBtn = document.getElementById('adjustModalCloseBtn');
+
+let agentsCache = [];
 let currentViewedAgent = null;
 let currentLogs = [];
 
@@ -226,54 +244,6 @@ async function resetAllAgentTimers() {
 
 resetTimersBtn.addEventListener('click', resetAllAgentTimers);
 
-//test snippet for manual adjustment of remaining time by admin, called by "Adjust Time" button in admin.html
-
-// Called by Admin "Adjust Time" button
-async function applyAdjustment(agentId, currentRemaining, fullName) {
-    const input = prompt(`Adjust time for ${fullName} (in minutes).\nUse positive numbers to add, negative to subtract:`, "0");
-    if (input === null) return;
-
-    const minutes = parseInt(input);
-    if (isNaN(minutes) || minutes === 0) {
-        alert("Please enter a valid number of minutes.");
-        return;
-    }
-
-    const reason = prompt("Reason for adjustment:");
-    if (!reason) {
-        alert("Adjustment cancelled. A reason is required.");
-        return;
-    }
-
-    const adjustmentSeconds = minutes * 60;
-    const newRemaining = currentRemaining + adjustmentSeconds;
-
-    try {
-        const agentRef = doc(db, 'agents', agentId);
-        await updateDoc(agentRef, {
-            remainingBreakTime: newRemaining
-        });
-
-        await addDoc(collection(db, 'breakLogs'), {
-            agentId,
-            agentName: fullName,
-            timestamp: serverTimestamp(),
-            manilaTime: getManilaTime(),
-            action: 'adjustment',
-            remainingTime: newRemaining,
-            deviceInfo: `Admin Adjustment: ${minutes}m (${reason})`,
-            deviceToken: 'admin-action',
-            adminId: sessionUser?.id || null,
-            adminName: sessionUser?.fullName || sessionUser?.username || 'Admin'
-        });
-
-        alert(`✅ Successfully adjusted ${fullName}'s time by ${minutes} minutes.`);
-    } catch (err) {
-        console.error('Adjustment failed:', err);
-        alert("Failed to apply adjustment.");
-    }
-}
-
 // --- Agent Management ---
 
 addAgentForm.addEventListener('submit', async (e) => {
@@ -314,9 +284,11 @@ function listenToAgents() {
             return String(t);
         };
 
-        snapshot.forEach((docSnap) => {
+        agentsCache = [];
+    snapshot.forEach((docSnap) => {
             const agent = docSnap.data();
             const id = docSnap.id;
+            agentsCache.push({ id, ...agent });
             const row = document.createElement('tr');
             row.className = "hover:bg-slate-700/30 transition-colors border-b border-slate-700/30";
 
@@ -324,26 +296,16 @@ function listenToAgents() {
             const remaining = agent.remainingBreakTime || 0;
             const lastActionText = agent.lastAction ? `${String(agent.lastAction).toUpperCase()} (${fmtActionTime(agent.lastActionTime)})` : 'Loading...';
             const actionButtons = [];
-            let leaveInfo = '';
 
-if (agent.currentLeave === true && agent.leaveType) {
-    leaveInfo = `
-        <div class="mt-2 inline-flex items-center rounded-full bg-purple-500/10 text-purple-300 text-[10px] uppercase px-2 py-1 tracking-[0.2em]">
-            ${agent.leaveType}
-        </div>
-    `;
-} else if (agent.currentLeave === false) {
-    leaveInfo = `
-        <div class="mt-2 inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] uppercase px-2 py-1 tracking-[0.2em]">
-            Available
-        </div>
-    `;
-}
+            // Compute a single status display: Break > Leave Type > Available
+            const displayStatus = isBreak
+                ? 'Break'
+                : (agent.currentLeave ? (agent.leaveType || 'Leave') : 'Available');
+
+            const statusClass = isBreak
+                ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                : (agent.currentLeave ? 'bg-purple-500/10 text-purple-300 border border-purple-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20');
             actionButtons.push(`<button type="button" class="view-logs-btn bg-slate-700 hover:bg-slate-600 text-xs font-bold px-4 py-2 rounded-lg transition-all">View Logs</button>`);
-            if (agent.role !== 'admin') {
-                actionButtons.push(`<button type="button" class="leave-btn bg-amber-600 hover:bg-amber-500 text-xs font-bold px-4 py-2 rounded-lg transition-all">Set Leave</button>`);
-                actionButtons.push(`<button type="button" class="adj-btn bg-blue-600 hover:bg-blue-500 text-xs font-bold px-4 py-2 rounded-lg transition-all">Adjust Time</button>`);
-            }
 
             row.innerHTML = `
                 <td class="px-8 py-5">
@@ -352,11 +314,10 @@ if (agent.currentLeave === true && agent.leaveType) {
                 </td>
                 <td class="px-8 py-5">
                     <div class="inline-flex items-center gap-2">
-                        <span class="px-3 py-1 rounded-full text-[10px] uppercase font-black ${isBreak ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}">
-                            ${agent.status}
+                        <span class="px-3 py-1 rounded-full text-[10px] uppercase font-black ${statusClass}">
+                            ${displayStatus}
                         </span>
                     </div>
-                    ${leaveInfo}
                 </td>
                 <td class="px-8 py-5 font-mono ${remaining < 0 ? 'text-red-400' : 'text-slate-300'}">
                     ${formatTime(remaining)}
@@ -373,8 +334,6 @@ if (agent.currentLeave === true && agent.leaveType) {
             targetTable.appendChild(row);
 
             row.querySelector('.view-logs-btn')?.addEventListener('click', () => viewLogs(id, agent.fullName || 'N/A'));
-            row.querySelector('.leave-btn')?.addEventListener('click', () => setAgentLeave(id, agent.fullName || 'N/A'));
-            row.querySelector('.adj-btn')?.addEventListener('click', () => applyAdjustment(id, remaining, agent.fullName || 'N/A'));
 
             if (!agent.lastAction) {
                 (async () => {
@@ -443,68 +402,66 @@ const viewLogs = async (agentId, fullName) => {
 
 closeModalBtn.onclick = () => logsModal.classList.add('hidden');
 
-async function setAgentLeave(agentId, fullName) {
-    const input = prompt(
-        'Enter leave type or status:\n\n' +
-        '• Vacation Leave\n' +
-        '• Sick Leave\n' +
-        '• Emergency Leave\n' +
-        '• Available (to end current leave)'
-    );
+function populateSelect(selectElement, users, includeAdmin = false) {
+    selectElement.innerHTML = '<option value="" disabled selected>Select registered user</option>';
+    users.forEach(user => {
+        if (!includeAdmin && user.role === 'admin') return;
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = `${user.fullName} (@${user.username})`;
+        selectElement.appendChild(option);
+    });
+}
 
-    if (!input) return;
+function openLeaveModal() {
+    populateSelect(leaveAgentSelect, agentsCache);
+    leaveTypeSelect.value = 'Vacation Leave';
+    leaveModal.classList.remove('hidden');
+}
 
-    const normalized = input.trim().toLowerCase();
-    let updateData = {};
-    let logAction = '';
-    let statusMessage = '';
+function closeLeaveModal() {
+    leaveModal.classList.add('hidden');
+}
 
-    if (normalized === 'available') {
-        // END LEAVE - Revert to normal
-        updateData = {
-            currentLeave: false,
-            leaveType: null,
-            leaveSetAt: null
-        };
-        logAction = 'return_from_leave';
-        statusMessage = 'Available';
+function openAdjustModal() {
+    populateSelect(adjustAgentSelect, agentsCache);
+    adjustMinutesInput.value = '';
+    adjustReasonInput.value = '';
+    adjustModal.classList.remove('hidden');
+}
 
-        if (!confirm(`Mark ${fullName} as Available and end their leave?`)) return;
+function closeAdjustModal() {
+    adjustModal.classList.add('hidden');
+}
 
-    } else {
-        // SET NEW LEAVE
-        const validTypes = {
-            'vacation leave': 'Vacation Leave',
-            'sick leave': 'Sick Leave',
-            'emergency leave': 'Emergency Leave'
-        };
-
-        const selectedLeave = validTypes[normalized];
-
-        if (!selectedLeave) {
-            alert('Invalid input.\nPlease type:\nVacation Leave, Sick Leave, Emergency Leave, or Available');
-            return;
-        }
-
-        updateData = {
-            currentLeave: true,
-            leaveType: selectedLeave,
-            leaveSetAt: serverTimestamp()
-        };
-        logAction = 'leave';
-        statusMessage = selectedLeave;
-
-        if (!confirm(`Set ${fullName} to ${selectedLeave}?`)) return;
+async function submitLeaveChange() {
+    const selectedAgentId = leaveAgentSelect.value;
+    const leaveType = leaveTypeSelect.value;
+    if (!selectedAgentId || !leaveType) {
+        alert('Please select an agent and leave type.');
+        return;
     }
 
+    const agent = agentsCache.find(a => a.id === selectedAgentId);
+    if (!agent) {
+        alert('Selected agent not found.');
+        return;
+    }
+
+    const updateData = leaveType === 'Available'
+        ? { currentLeave: false, leaveType: null, leaveSetAt: null }
+        : { currentLeave: true, leaveType, leaveSetAt: serverTimestamp() };
+
+    const logAction = leaveType === 'Available' ? 'return_from_leave' : 'leave';
+    const statusMessage = leaveType;
+
     try {
-        const agentRef = doc(db, 'agents', agentId);
-        
+        const agentRef = doc(db, 'agents', selectedAgentId);
         await updateDoc(agentRef, updateData);
 
         await addDoc(collection(db, 'breakLogs'), {
-            agentId,
-            agentName: fullName,
+            agentId: selectedAgentId,
+            agentName: agent.fullName,
             timestamp: serverTimestamp(),
             manilaTime: getManilaTime(),
             action: logAction,
@@ -514,13 +471,64 @@ async function setAgentLeave(agentId, fullName) {
             deviceToken: 'admin-action'
         });
 
-        alert(`✅ ${fullName} is now marked as ${statusMessage}.`);
-        
+        alert(`✅ ${agent.fullName} is now marked as ${statusMessage}.`);
+        closeLeaveModal();
     } catch (err) {
         console.error('Failed to update leave status:', err);
         alert('❌ Error updating leave status. Check console for details.');
     }
 }
+
+async function submitAdjustment() {
+    const selectedAgentId = adjustAgentSelect.value;
+    const minutes = parseInt(adjustMinutesInput.value, 10);
+    const reason = adjustReasonInput.value.trim();
+
+    if (!selectedAgentId || isNaN(minutes) || reason.length === 0) {
+        alert('Please choose a user, enter a minute adjustment, and provide a reason.');
+        return;
+    }
+
+    const agent = agentsCache.find(a => a.id === selectedAgentId);
+    if (!agent) {
+        alert('Selected agent not found.');
+        return;
+    }
+
+    const newRemaining = (agent.remainingBreakTime || 0) + minutes * 60;
+
+    try {
+        const agentRef = doc(db, 'agents', selectedAgentId);
+        await updateDoc(agentRef, { remainingBreakTime: newRemaining });
+
+        await addDoc(collection(db, 'breakLogs'), {
+            agentId: selectedAgentId,
+            agentName: agent.fullName,
+            timestamp: serverTimestamp(),
+            manilaTime: getManilaTime(),
+            action: 'adjustment',
+            remainingTime: newRemaining,
+            deviceInfo: `Admin Adjustment: ${minutes}m (${reason})`,
+            deviceToken: 'admin-action',
+            adminId: sessionUser?.id || null,
+            adminName: sessionUser?.fullName || sessionUser?.username || 'Admin'
+        });
+
+        alert(`✅ Successfully adjusted ${agent.fullName}'s time by ${minutes} minutes.`);
+        closeAdjustModal();
+    } catch (err) {
+        console.error('Adjustment failed:', err);
+        alert('❌ Failed to apply adjustment.');
+    }
+}
+
+openLeaveModalBtn?.addEventListener('click', openLeaveModal);
+submitLeaveChangeBtn?.addEventListener('click', submitLeaveChange);
+leaveModalCloseBtn?.addEventListener('click', closeLeaveModal);
+
+openAdjustModalBtn?.addEventListener('click', openAdjustModal);
+submitAdjustBtn?.addEventListener('click', submitAdjustment);
+adjustModalCloseBtn?.addEventListener('click', closeAdjustModal);
 
 exportCsvBtn.onclick = () => {
     if (!currentLogs.length) return;
